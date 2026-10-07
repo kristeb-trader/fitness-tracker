@@ -1,89 +1,92 @@
-# Mi seguimiento: comida, ejercicio, peso y cintura
+# Mi seguimiento: comida, ejercicio, peso, cintura y sueño
 
-Una app personal con dos formas de registrar datos:
+Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya, y la app se publica gratis en **GitHub Pages**. No necesitas pagar nada ni instalar programas.
 
-1. **Chat con Claude** (la principal): escribes lo que comiste y Claude estima, valida y guarda.
-2. **Formulario web** (respaldo): una página sencilla para registrar comida, medidas y ejercicio a mano.
+> Fase 1: registrar y ver el resumen del día. Las gráficas de progreso vienen en la siguiente fase.
 
-Los datos viven en **Supabase** y la página se publica gratis en **GitHub Pages**.
-Todo es para una sola persona.
+## Cómo funciona (en simple)
 
-> Esta es la Fase 1: registrar datos. Las gráficas vienen en la siguiente fase.
+- **Tu hoja de Google** guarda todo, con una pestaña por tema: `comidas`, `ejercicio`, `series_gym`, `medidas` y `metas`. Puedes abrirla y editarla cuando quieras.
+- **Un pequeño servicio de Google** (Apps Script) conecta la hoja con la app. Tú lo pegas una sola vez.
+- **La app** es una página que se instala en tu celular como cualquier app.
+- **La contraseña** vive solo en dos lugares: en tu servicio de Google y en tu celular. No está en este repositorio.
 
 ---
 
-## Paso 1. Crear tu base de datos en Supabase (≈ 5 min)
+## Paso 1. Crear tu hoja
 
-1. Entra a <https://supabase.com> y crea una cuenta gratis.
-2. Pulsa **New project**. Ponle un nombre (por ejemplo `seguimiento`), elige una contraseña para la base de datos (guárdala en tu gestor de contraseñas, no aquí) y la región más cercana.
-3. Espera a que el proyecto termine de crearse.
+1. Entra a <https://sheets.new> con tu cuenta de Google.
+2. Ponle el nombre **Mi seguimiento**.
 
-## Paso 2. Crear las tablas
+## Paso 2. Pegar el servicio de Google
 
-1. En Supabase, menú izquierdo → **SQL Editor** → **New query**.
-2. Abre el archivo `schema.sql` de este repositorio, copia **todo** su contenido y pégalo.
-3. Pulsa **Run**. Debe decir "Success". Si lo ejecutas dos veces no pasa nada: no borra datos.
-4. Comprueba en **Table Editor** que ves 5 tablas: `comidas`, `ejercicio`, `series_gym`, `medidas`, `metas`. En `metas` ya vienen tus metas iniciales.
+1. En la hoja: **Extensiones → Apps Script**.
+2. Borra lo que aparece y pega **todo** el contenido del archivo `apps-script/Code.gs` de este repositorio.
+3. Pulsa el icono de guardar.
 
-## Paso 3. Crear tu usuario y cerrar la puerta
+## Paso 3. Crear las pestañas
 
-1. **Authentication → Users → Add user → Create new user**. Escribe tu email y marca **Auto Confirm User**. No hace falta contraseña real: entrarás con un enlace por correo.
-2. **Authentication → Sign In / Providers** (o *Settings*): **desactiva "Allow new users to sign up"**. Así nadie más puede crear cuenta. **Este paso es importante para tu seguridad.**
-3. **Authentication → URL Configuration**: en **Site URL** pon la dirección de tu página (la tendrás en el Paso 5, algo como `https://TU-USUARIO.github.io/fitness-tracker/`). Puedes volver aquí después.
+1. Arriba, en el selector de funciones, elige **setup** y pulsa **Ejecutar**.
+2. Google pedirá permiso. Pulsa **Revisar permisos**, elige tu cuenta y, si sale "Google no ha verificado esta app", pulsa **Avanzado → Ir a (nombre del proyecto)**. Es seguro: es tu propio script y solo toca esta hoja.
+3. Vuelve a la hoja: ya debes ver las 5 pestañas, con tus metas iniciales en `metas`.
 
-## Paso 4. Conectar la página con tu base de datos
+## Paso 4. Crear tu contraseña
 
-1. En Supabase: **Project Settings → API**. Copia la **Project URL** y la clave **publishable** (también puede llamarse *anon public*).
-2. Abre `config.js` y reemplaza los dos valores de ejemplo.
+1. En Apps Script, menú izquierdo: engranaje **Configuración del proyecto**.
+2. Abajo, **Propiedades de la secuencia de comandos → Agregar propiedad**.
+3. Nombre: `TOKEN`. Valor: una contraseña **larga** (mínimo 16 caracteres, por ejemplo cuatro palabras al azar con números). Guárdala en tu gestor de contraseñas.
+4. Guarda.
 
-Esas dos claves son públicas por diseño: no pasa nada porque estén en el repositorio. Lo que protege tus datos son las reglas de la base de datos. **Nunca pegues la clave `service_role` ni ninguna "secret key" en el repositorio.**
+## Paso 5. Publicar el servicio
 
-## Paso 5. Publicar la página
+1. **Implementar → Nueva implementación**.
+2. Tipo: **Aplicación web**.
+3. **Ejecutar como: Yo**. **Quién tiene acceso: Cualquier usuario**.
+4. Pulsa **Implementar** y copia la dirección que termina en `/exec`.
+
+> "Cualquier usuario" solo significa que la dirección responde. Sin tu contraseña no devuelve ningún dato. No compartas la dirección ni la contraseña. Si crees que se filtró, cambia el valor de `TOKEN` y listo.
+>
+> Si algún día cambias `Code.gs`, hay que hacer **Implementar → Administrar implementaciones → editar → Nueva versión**.
+
+## Paso 6. Conectar la app
+
+1. Abre `config.js` y reemplaza `https://script.google.com/macros/s/TU-ID/exec` por la dirección que copiaste.
+2. Guarda el cambio en GitHub.
+
+## Paso 7. Publicar la app
 
 1. En GitHub: tu repositorio → **Settings → Pages**.
-2. En **Build and deployment**, elige **Deploy from a branch**, rama `main`, carpeta `/ (root)`. Guarda.
-3. En un par de minutos tendrás tu dirección. Ábrela, escribe tu email, pulsa **Enviarme el enlace** y abre el correo que te llega.
+2. **Deploy from a branch**, rama `main`, carpeta `/ (root)`. Guarda.
+3. En un par de minutos tendrás tu dirección, algo como `https://TU-USUARIO.github.io/fitness-tracker/`.
+
+## Paso 8. Instalarla en el celular
+
+1. Abre la dirección en el celular. La primera vez pide la **contraseña** del Paso 4. Solo se pide una vez por dispositivo.
+2. **iPhone (Safari):** botón Compartir → **Añadir a pantalla de inicio**.
+3. **Android (Chrome):** menú ⋮ → **Instalar aplicación**.
 
 ---
 
-## Registrar con el chat de Claude (la forma cómoda)
+## Cómo se usa
 
-1. En Claude (claude.ai), activa el **conector de Supabase** (Configuración → Conectores → Supabase) y autoriza tu proyecto.
-2. Abre un chat nuevo y pega este mensaje **una sola vez** para dejarle las reglas:
-
-```
-Eres mi asistente de seguimiento. Usa el conector de Supabase de mi proyecto "seguimiento".
-Reglas:
-- Cuando te cuente una comida, estima kcal, proteína, carbos y grasa. Si no me dio pesos o cantidades exactas, marca estimado = true. Si son datos exactos (etiqueta o gramos pesados), estimado = false.
-- Guarda directo en la tabla comidas y luego muéstrame lo que guardaste. Si algo no se entiende o las cantidades parecen raras, pregúntame antes de guardar.
-- Tipos de comida válidos: desayuno, almuerzo, cena, snack. Usa la fecha de hoy si no te digo otra.
-- Después de guardar, dime el total del día: kcal y proteína contra mis metas (tabla metas). Meta de proteína: 130 a 160 g. Calorías: cerca de mantenimiento (kcal_base más el ejercicio del día) menos 200 a 300 kcal en días normales.
-- Peso, cintura y sueño van en la tabla medidas (una fila por día: si ya existe esa fecha, actualízala). Ejercicio va en ejercicio (tipo: gym, bici o caminata; fuente: manual, estimado o strava). Series de gym van en series_gym.
-- Nunca borres ni modifiques registros viejos sin que yo te lo pida.
-- Responde en español, con unidades en kg, cm y kcal.
-```
-
-3. Desde ahí, solo escribe cosas como:
-   - "Desayuno: 3 huevos revueltos y 2 tostadas con aguacate"
-   - "Peso 72,4, cintura 86, dormí 7 horas"
-   - "Caminata de 40 minutos"
-   - "Press banca: 4 series de 8 con 60 kg"
-
-Si Claude estima mal una comida, dile "corrige la última a 600 kcal" y la actualiza.
-
----
+- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas y ejercicio del día. Con las flechas y la tira de días puedes ver otros días.
+- **Botón +:** agregar comida, medidas (peso, cintura, sueño) o ejercicio.
+- **Tocar una comida o un ejercicio:** ver el detalle o borrarlo.
+- **Medidas:** un registro por día. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes.
+- **Meta de calorías del día** = calorías base + ejercicio del día − déficit promedio. Las cifras se cambian en la pestaña `metas` de tu hoja.
 
 ## Qué hay en este repositorio
 
 | Archivo | Para qué sirve |
 |---|---|
-| `schema.sql` | Crea las 5 tablas y las reglas de seguridad |
-| `index.html`, `app.js` | La página con los formularios |
-| `config.js` | Tu URL y clave pública de Supabase |
+| `apps-script/Code.gs` | El servicio de Google: guarda y lee datos, con contraseña |
+| `index.html`, `styles.css`, `app.js` | La app |
+| `config.js` | La dirección de tu servicio de Google |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Lo que permite instalarla en el celular |
 
 ## Seguridad en resumen
 
-- Solo un usuario con sesión iniciada puede leer y escribir datos (RLS activado en todas las tablas).
-- Los registros nuevos están desactivados, así que solo existes tú.
-- El repositorio no contiene contraseñas ni claves secretas.
-- El conector de Claude entra con tu cuenta de Supabase. Autorízalo solo en tu cuenta personal.
+- Toda petición exige tu contraseña, que se compara en el servicio de Google. Sin ella no se lee ni se escribe nada.
+- La contraseña no está en el repositorio: vive en las propiedades de tu proyecto de Apps Script y en tu celular.
+- El servicio valida cada dato (tipos de comida, rangos, fechas) antes de guardarlo.
+- Los datos están en tu cuenta de Google. Nadie más puede abrir la hoja a menos que tú la compartas.

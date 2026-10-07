@@ -1,7 +1,6 @@
-// Estos dos valores son PÚBLICOS por diseño (la seguridad la da la base de datos).
-// Cámbialos por los de tu proyecto en Supabase > Project Settings > API.
-// NUNCA pegues aquí la clave "service_role" ni ninguna clave secreta.
+// Dirección de tu servicio de Google (Apps Script). Ver README, paso 4.
+// Esta dirección NO es secreta por sí sola: sin tu contraseña no devuelve nada.
+// La contraseña (TOKEN) NUNCA se escribe aquí: se pega una vez en la app, en tu celular.
 window.CONFIG = {
-  SUPABASE_URL: "https://TU-PROYECTO.supabase.co",
-  SUPABASE_PUBLISHABLE_KEY: "TU-CLAVE-PUBLICA"
+  SCRIPT_URL: "https://script.google.com/macros/s/TU-ID/exec"
 };

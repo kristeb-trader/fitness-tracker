@@ -1,0 +1,16 @@
+{
+  "name": "Mi seguimiento",
+  "short_name": "Seguimiento",
+  "description": "Comida, ejercicio, peso, cintura y sueño",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F4F6F2",
+  "theme_color": "#F4F6F2",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

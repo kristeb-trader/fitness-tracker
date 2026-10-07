@@ -2,118 +2,22 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F4F6F2">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Seguimiento">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
   <title>Mi seguimiento</title>
-  <style>
-    :root { --bg:#f6f7f9; --card:#fff; --txt:#1c2330; --sub:#5f6b7a; --brand:#0b6e4f; --err:#b3261e; --line:#d9dee5; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#12161c; --card:#1b212a; --txt:#e8ecf1; --sub:#9aa6b5; --brand:#3ecf8e; --err:#ff8a80; --line:#2c3541; }
-    }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui, sans-serif; }
-    main { max-width:520px; margin:0 auto; padding:16px; }
-    h1 { font-size:1.3rem; margin:8px 0 12px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:12px; }
-    label { display:block; font-size:.85rem; color:var(--sub); margin:10px 0 4px; }
-    input, select, textarea, button { width:100%; font:inherit; color:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
-    button { background:var(--brand); color:#fff; border:0; font-weight:600; margin-top:14px; cursor:pointer; }
-    button.sec { background:transparent; color:var(--sub); border:1px solid var(--line); margin-top:8px; }
-    .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .tabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:12px; }
-    .tabs button { margin:0; background:var(--card); color:var(--txt); border:1px solid var(--line); }
-    .tabs button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
-    .check { display:flex; align-items:center; gap:8px; margin-top:12px; }
-    .check input { width:auto; }
-    #msg { min-height:1.4em; margin:8px 0; font-weight:600; color:var(--brand); }
-    #msg.err { color:var(--err); }
-    .hidden { display:none; }
-    small { color:var(--sub); }
-  </style>
 </head>
 <body>
-<main>
-  <h1>Mi seguimiento</h1>
-  <div id="msg" role="status"></div>
-
-  <!-- Entrar -->
-  <section id="login" class="card hidden">
-    <p>Escribe tu email y te enviaremos un enlace para entrar (sin contraseña).</p>
-    <label for="email">Email</label>
-    <input id="email" type="email" autocomplete="email" required>
-    <button id="btn-login">Enviarme el enlace</button>
-  </section>
-
-  <!-- App -->
-  <section id="app" class="hidden">
-    <div class="tabs">
-      <button data-tab="comida" class="on">Comida</button>
-      <button data-tab="medidas">Medidas</button>
-      <button data-tab="ejercicio">Ejercicio</button>
-    </div>
-
-    <form id="f-comida" class="card">
-      <div class="row">
-        <div><label>Fecha</label><input name="fecha" type="date" required></div>
-        <div><label>Hora</label><input name="hora" type="time"></div>
-      </div>
-      <label>Tipo de comida</label>
-      <select name="tipo_comida" required>
-        <option value="desayuno">Desayuno</option>
-        <option value="almuerzo">Almuerzo</option>
-        <option value="cena">Cena</option>
-        <option value="snack">Snack</option>
-      </select>
-      <label>Descripción</label>
-      <textarea name="descripcion" rows="2" required placeholder="Ej: 200 g de pollo con arroz y ensalada"></textarea>
-      <div class="row">
-        <div><label>Calorías (kcal)</label><input name="kcal" type="number" min="0" step="1"></div>
-        <div><label>Proteína (g)</label><input name="proteina_g" type="number" min="0" step="0.1"></div>
-        <div><label>Carbohidratos (g)</label><input name="carbos_g" type="number" min="0" step="0.1"></div>
-        <div><label>Grasa (g)</label><input name="grasa_g" type="number" min="0" step="0.1"></div>
-      </div>
-      <label class="check"><input name="estimado" type="checkbox"> Los valores son estimados</label>
-      <button type="submit">Guardar comida</button>
-    </form>
-
-    <form id="f-medidas" class="card hidden">
-      <small>Un registro por día: si guardas otra vez el mismo día, se actualiza.</small>
-      <label>Fecha</label><input name="fecha" type="date" required>
-      <div class="row">
-        <div><label>Peso en ayunas (kg)</label><input name="peso_kg" type="number" min="1" step="0.1"></div>
-        <div><label>Cintura (cm)</label><input name="cintura_cm" type="number" min="1" step="0.1"></div>
-      </div>
-      <label>Horas de sueño</label><input name="horas_sueno" type="number" min="0" max="24" step="0.1">
-      <button type="submit">Guardar medidas</button>
-    </form>
-
-    <form id="f-ejercicio" class="card hidden">
-      <label>Fecha</label><input name="fecha" type="date" required>
-      <label>Tipo</label>
-      <select name="tipo" required>
-        <option value="gym">Gym</option>
-        <option value="bici">Bici</option>
-        <option value="caminata">Caminata</option>
-      </select>
-      <div class="row">
-        <div><label>Duración (min)</label><input name="duracion_min" type="number" min="1" step="1"></div>
-        <div><label>Calorías (kcal)</label><input name="kcal" type="number" min="0" step="1"></div>
-      </div>
-      <label>Fuente de los datos</label>
-      <select name="fuente">
-        <option value="manual">Manual</option>
-        <option value="estimado">Estimado</option>
-        <option value="strava">Strava</option>
-      </select>
-      <label>Notas</label><textarea name="notas" rows="2"></textarea>
-      <button type="submit">Guardar ejercicio</button>
-    </form>
-
-    <button id="btn-logout" class="sec">Cerrar sesión</button>
-  </section>
-</main>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+  <div id="app" class="app"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

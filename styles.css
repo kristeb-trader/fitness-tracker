@@ -1,0 +1,106 @@
+:root {
+  --bg: #F4F6F2; --card: #fff; --ink: #14281E; --sub: #5C6B60; --line: #E4E8E0;
+  --lime: #A8E063; --lime-soft: #E8F5D4; --lime-ink: #2E5A12; --link: #3F7D1A; --err: #B3261E;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 'Manrope', system-ui, sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+.app { max-width: 480px; margin: 0 auto; padding: 20px 20px calc(120px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; min-height: 100vh; }
+
+/* Cabecera */
+.top { display: flex; align-items: center; justify-content: space-between; min-height: 52px; }
+.top .quien { display: flex; align-items: center; gap: 12px; }
+.avatar { width: 48px; height: 48px; border-radius: 50%; background: #DDEFC4; border: 2px solid #8CC63F; display: grid; place-items: center; flex: none; }
+.sub { font-size: 13px; color: var(--sub); font-weight: 500; }
+.titulo { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+.icono-btn { width: 44px; height: 44px; border-radius: 50%; border: 0; background: #fff; display: grid; place-items: center; box-shadow: 0 2px 8px rgba(20,40,30,.08); }
+
+/* Tira de días */
+.dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.dia { border: 0; background: transparent; border-radius: 16px; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.dia span:first-child { font-size: 12px; color: var(--sub); font-weight: 600; }
+.dia span:last-child { font-size: 18px; font-weight: 700; }
+.dia.on { background: var(--ink); }
+.dia.on span:first-child { color: #A8E063; font-weight: 700; }
+.dia.on span:last-child { color: #fff; font-weight: 800; }
+.dia:disabled { opacity: .4; cursor: default; }
+
+/* Tarjeta verde */
+.hero { background: var(--lime); border-radius: 28px; padding: 20px 18px; display: flex; align-items: center; gap: 16px; position: relative; overflow: hidden; min-height: 190px; }
+.hero::after { content: ""; position: absolute; right: -60px; bottom: -90px; width: 230px; height: 230px; border-radius: 50%; background: rgba(255,255,255,.22); pointer-events: none; }
+.anillo { position: relative; width: 140px; height: 140px; flex: none; z-index: 1; }
+.anillo .centro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.anillo .num { font-size: 30px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.anillo .et { font-size: 12px; font-weight: 600; margin-top: 2px; color: #2E4A1C; }
+.macros { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 0; }
+.fila { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; }
+.barra { height: 7px; border-radius: 4px; background: rgba(255,255,255,.5); margin-top: 6px; }
+.barra > div { height: 100%; border-radius: 4px; background: var(--ink); }
+.meta { font-size: 12px; font-weight: 600; color: #2E4A1C; }
+
+/* Tarjetas chicas */
+.dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { background: var(--card); border-radius: 24px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; min-height: 140px; }
+.card .cab { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--sub); font-weight: 600; }
+.chip-ico { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; }
+.valor { font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
+.valor small { font-size: 13px; color: var(--sub); font-weight: 600; }
+.nota { font-size: 12px; color: var(--sub); font-weight: 600; margin-top: -4px; }
+.puntos { display: flex; gap: 4px; }
+.puntos i { width: 12px; height: 12px; border-radius: 6px; background: #DCE8F7; }
+.puntos i.on { background: #4A90E2; }
+
+/* Comidas */
+.seccion { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 4px 0; }
+.seccion h2 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.3px; }
+.seccion span { font-size: 13px; font-weight: 700; color: var(--link); }
+.carrusel { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; margin: 0 -20px; padding-left: 20px; padding-right: 20px; scrollbar-width: none; }
+.carrusel::-webkit-scrollbar { display: none; }
+.plato { flex: none; width: 150px; scroll-snap-align: start; background: #fff; border: 0; border-radius: 24px; padding: 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.plato b { font-size: 15px; font-weight: 800; }
+.plato .desc { font-size: 12px; color: var(--sub); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -4px; }
+.kcal-chip { font-size: 12px; font-weight: 700; background: var(--lime-soft); color: var(--lime-ink); border-radius: 999px; padding: 4px 12px; }
+.vacio { background: #fff; border-radius: 24px; padding: 20px; text-align: center; color: var(--sub); font-size: 14px; }
+.lista { display: flex; flex-direction: column; gap: 8px; }
+.item { background: #fff; border: 0; border-radius: 18px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; }
+.item .t { flex: 1; min-width: 0; }
+.item .t b { display: block; font-size: 14px; }
+.item .t span { font-size: 12px; color: var(--sub); }
+
+/* Barra inferior */
+.nav { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); width: min(456px, calc(100% - 24px)); height: 68px; background: #fff; border-radius: 34px; box-shadow: 0 6px 24px rgba(20,40,30,.12); display: grid; grid-template-columns: 1fr 88px 1fr; align-items: center; padding: 0 14px; z-index: 5; }
+.nav .tab { border: 0; background: transparent; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--sub); min-height: 44px; justify-content: center; }
+.nav .tab.on { color: var(--ink); font-weight: 800; }
+.fab { width: 64px; height: 64px; border-radius: 50%; border: 5px solid #fff; background: var(--lime); color: var(--ink); display: grid; place-items: center; justify-self: center; margin-top: -34px; box-shadow: 0 8px 18px rgba(120,190,50,.45); padding: 0; }
+
+/* Hoja inferior (formularios) */
+dialog { border: 0; padding: 0; background: transparent; width: 100%; max-width: 480px; margin: auto auto 0; max-height: 92vh; }
+dialog::backdrop { background: rgba(20,40,30,.4); }
+.hoja { background: var(--bg); border-radius: 28px 28px 0 0; padding: 16px 20px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
+.hoja h3 { margin: 0; font-size: 18px; font-weight: 800; }
+.hoja-cab { display: flex; justify-content: space-between; align-items: center; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: #fff; padding: 4px; border-radius: 999px; }
+.tabs button { border: 0; background: transparent; border-radius: 999px; min-height: 40px; font-weight: 700; font-size: 14px; color: var(--sub); }
+.tabs button.on { background: var(--ink); color: #fff; }
+label { display: block; font-size: 12px; color: var(--sub); font-weight: 600; margin: 8px 0 4px; }
+input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; min-height: 44px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 14px; color: var(--ink); font-weight: 600; }
+.check input { width: 22px; height: 22px; min-height: 0; }
+.btn { width: 100%; min-height: 48px; border: 0; border-radius: 16px; background: var(--ink); color: #fff; font-weight: 800; margin-top: 12px; }
+.btn.lima { background: var(--lime); color: var(--ink); }
+.btn.sec { background: transparent; color: var(--sub); border: 1px solid var(--line); }
+.btn.peligro { background: transparent; color: var(--err); border: 1px solid var(--err); }
+.ayuda { font-size: 12px; color: var(--sub); margin: 0; }
+
+/* Entrada con contraseña */
+.entrada { background: #fff; border-radius: 24px; padding: 20px; display: flex; flex-direction: column; gap: 6px; margin-top: 40px; }
+.entrada h1 { margin: 0 0 4px; font-size: 22px; font-weight: 800; }
+.error { color: var(--err); font-size: 13px; font-weight: 600; min-height: 1.2em; margin: 4px 0 0; }
+
+.toast { position: fixed; left: 50%; top: 16px; transform: translate(-50%, -80px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 999px; font-size: 14px; font-weight: 700; transition: transform .25s; z-index: 20; max-width: calc(100% - 32px); text-align: center; }
+.toast.ver { transform: translate(-50%, 0); }
+.toast.err { background: var(--err); }
+.cargando { opacity: .55; pointer-events: none; }
