@@ -109,7 +109,7 @@
 
   // ---------- Estado ----------
   var hoy = iso(new Date());
-  var estado = { fecha: hoy, datos: null };
+  var estado = { fecha: hoy, datos: null, historial: [] };
   var raiz = document.getElementById("app");
 
   function pantallaEntrada(mensaje) {
@@ -284,7 +284,7 @@
 
     raiz.appendChild(h("nav", { class: "nav", "aria-label": "Principal" },
       h("button", { class: "tab on", "aria-label": "Hoy", onclick: function () { estado.fecha = hoy; cargar(); } }, icono("home"), "Hoy"),
-      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar("comida"); } }, icono("plus", 28)),
+      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.datos && estado.datos.chat ? "chat" : "comida"); } }, icono("plus", 28)),
       h("button", { class: "tab", "aria-label": "Ajustes", onclick: abrirAjustes }, icono("ajustes"), "Ajustes")
     ));
   }
@@ -405,10 +405,63 @@
     return f;
   }
 
+
+  function formChat() {
+    var log = h("div", { class: "chat-log", "aria-live": "polite" });
+    var texto = h("textarea", { rows: 2, maxlength: "1000", placeholder: "Ej: almuerzo, 200 g de pollo con arroz y ensalada", "aria-label": "Mensaje" });
+    var btn = h("button", { class: "btn lima", type: "button", text: "Enviar" });
+
+    function burbuja(e) {
+      var b = h("div", { class: "burbuja " + (e.rol === "user" ? "yo" : "ia") + (e.error ? " error" : ""), text: e.texto });
+      (e.guardados || []).forEach(function (g) {
+        if (!g.id) return;
+        var u = h("button", { class: "deshacer", type: "button", text: "Deshacer: " + g.texto.slice(0, 40), onclick: function () {
+          u.disabled = true;
+          api("borrar", { tabla: g.tabla, id: g.id }).then(function () { u.textContent = "Borrado"; cargar(); })
+            .catch(function (er) { u.disabled = false; manejarError(er); });
+        } });
+        b.appendChild(u);
+      });
+      log.appendChild(b);
+      log.scrollTop = log.scrollHeight;
+      return b;
+    }
+    if (!estado.historial.length) {
+      log.appendChild(h("div", { class: "burbuja ia", text: "Cuéntame qué comiste, tu peso, cintura, sueño o ejercicio y lo guardo. Por ejemplo: «desayuno 3 huevos y 2 tostadas» o «peso 72,4, dormí 7 horas»." }));
+    }
+    estado.historial.forEach(burbuja);
+
+    btn.addEventListener("click", function () {
+      var t = texto.value.trim();
+      if (!t) return;
+      var previo = estado.historial.filter(function (x) { return !x.error; }).slice(-8).map(function (x) { return { rol: x.rol, texto: x.texto }; });
+      var mio = { rol: "user", texto: t };
+      estado.historial.push(mio); burbuja(mio);
+      texto.value = "";
+      btn.disabled = true; btn.textContent = "Pensando…";
+      var espera = h("div", { class: "burbuja ia", text: "…" });
+      log.appendChild(espera); log.scrollTop = log.scrollHeight;
+      api("chat", { texto: t, historial: previo, hoy: hoy, hora: ahoraHHMM() }).then(function (r) {
+        espera.remove();
+        var resp = { rol: "assistant", texto: r.respuesta, guardados: r.guardados || [] };
+        estado.historial.push(resp); burbuja(resp);
+        if (resp.guardados.length) cargar();
+      }).catch(function (e) {
+        espera.remove();
+        if (e && e.noAutorizado) return manejarError(e);
+        var msg = { rol: "assistant", texto: e && e.message && !/fetch|network|Failed/i.test(e.message) ? e.message : "No hay conexión con tu hoja de Google.", error: true };
+        estado.historial.push(msg); burbuja(msg);
+      }).then(function () { btn.disabled = false; btn.textContent = "Enviar"; });
+    });
+
+    return h("div", { class: "chat" }, log, texto, btn,
+      h("p", { class: "ayuda", text: "Lo que escribas se envía a Claude para estimar los valores. Revisa lo guardado; puedes deshacerlo." }));
+  }
+
   function abrirAgregar(tab) {
     var cuerpo = h("div", {});
     var tabs = h("div", { class: "tabs", role: "tablist" });
-    var defs = [["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]];
+    var defs = (estado.datos && estado.datos.chat ? [["chat", "Chat", formChat]] : []).concat([["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
     function mostrar(clave) {
       cuerpo.textContent = "";
       Array.prototype.forEach.call(tabs.children, function (b, i) { b.className = defs[i][0] === clave ? "on" : ""; b.setAttribute("aria-selected", defs[i][0] === clave); });

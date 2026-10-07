@@ -98,6 +98,7 @@ function doPost(e) {
       case 'agregar': return salida(conBloqueo(function () { return agregar(pedido.tabla, pedido.fila); }));
       case 'medidas': return salida(conBloqueo(function () { return guardarMedidas(pedido.fila); }));
       case 'borrar': return salida(conBloqueo(function () { return borrar(pedido.tabla, pedido.id); }));
+      case 'chat': return salida(chat(pedido));
       default: return salida({ ok: false, error: 'Acción desconocida' });
     }
   } catch (err) {
@@ -235,6 +236,7 @@ function dia(fecha) {
   var conPeso = hastaHoy.filter(function (m) { return m.peso_kg !== null; });
   var conCintura = hastaHoy.filter(function (m) { return m.cintura_cm !== null; });
   return {
+    chat: !!claveApi(),
     metas: metas,
     comidas: leer('comidas').filter(function (c) { return c.fecha === fecha; })
       .sort(function (a, b) { return String(a.hora || '') < String(b.hora || '') ? -1 : 1; }),
@@ -244,4 +246,211 @@ function dia(fecha) {
     ultimaCintura: conCintura.length ? conCintura[conCintura.length - 1] : null,
     pesos: conPeso.slice(-7).map(function (m) { return { fecha: m.fecha, peso_kg: m.peso_kg }; })
   };
+}
+
+// ---------- Chat: Claude estima y guarda lo que escribes ----------
+// Requiere la propiedad ANTHROPIC_API_KEY (opcional: MODELO). Nunca va en el repositorio.
+
+var API_URL = 'https://api.anthropic.com/v1/messages';
+var MODELO_POR_DEFECTO = 'claude-opus-5-5';
+
+function claveApi() { return PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY') || ''; }
+
+var NUM = { type: 'number' };
+var HERRAMIENTAS = [
+  {
+    name: 'registrar_comida',
+    description: 'Guarda UNA comida (todo lo de un mismo desayuno, almuerzo, cena o snack en un solo registro, con los totales).',
+    input_schema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        fecha: { type: 'string', description: 'AAAA-MM-DD. Si no se dice, usa la fecha de hoy.' },
+        hora: { type: 'string', description: 'HH:MM. Si no se dice, usa la hora actual.' },
+        tipo_comida: { type: 'string', enum: ['desayuno', 'almuerzo', 'cena', 'snack'] },
+        descripcion: { type: 'string', description: 'Qué comió, corto, con las cantidades.' },
+        kcal: NUM, proteina_g: NUM, carbos_g: NUM, grasa_g: NUM,
+        estimado: { type: 'boolean', description: 'true si los valores son una estimación; false solo si vienen de etiqueta o pesos exactos.' }
+      },
+      required: ['tipo_comida', 'descripcion', 'kcal', 'proteina_g', 'carbos_g', 'grasa_g', 'estimado']
+    }
+  },
+  {
+    name: 'registrar_medidas',
+    description: 'Guarda peso en ayunas, cintura y/o horas de sueño de un día. Incluye solo los datos que el usuario dio.',
+    input_schema: {
+      type: 'object', additionalProperties: false,
+      properties: { fecha: { type: 'string' }, peso_kg: NUM, cintura_cm: NUM, horas_sueno: NUM }
+    }
+  },
+  {
+    name: 'registrar_ejercicio',
+    description: 'Guarda una sesión de ejercicio.',
+    input_schema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        fecha: { type: 'string' },
+        tipo: { type: 'string', enum: ['gym', 'bici', 'caminata'] },
+        duracion_min: NUM, kcal: NUM,
+        fuente: { type: 'string', enum: ['manual', 'estimado', 'strava'], description: 'estimado si las kcal las calculas tú.' },
+        notas: { type: 'string' }
+      },
+      required: ['tipo']
+    }
+  },
+  {
+    name: 'registrar_serie_gym',
+    description: 'Guarda UNA serie de gym. Si dice "4 series de 8 con 60 kg", llama a esta herramienta 4 veces (numero_serie 1 a 4).',
+    input_schema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        fecha: { type: 'string' }, rutina: { type: 'string' }, ejercicio: { type: 'string' },
+        numero_serie: NUM, peso_kg: NUM, repeticiones: NUM
+      },
+      required: ['rutina', 'ejercicio', 'numero_serie', 'peso_kg', 'repeticiones']
+    }
+  }
+];
+
+function promptSistema(hoy, hora) {
+  return [
+    'Eres el asistente de seguimiento personal de un hombre de 41 años (1,72 m, unos 72 kg) que busca ganar masa muscular y reducir grasa abdominal.',
+    'Tu trabajo: leer lo que escribe y GUARDAR los datos con las herramientas. Responde siempre en español, breve y claro; unidades kg, cm y kcal.',
+    'Fecha de hoy: ' + hoy + '. Hora actual: ' + hora + '. Si dice "ayer", "anoche" o un día, calcula la fecha.',
+    'Comidas: estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.',
+    'Antes de guardar, revisa que las cantidades sean plausibles. Si algo es ambiguo o raro (por ejemplo 5.000 kcal en un snack, o no se entiende el alimento), NO guardes: haz una sola pregunta corta.',
+    'No inventes datos que no dijo (no pongas peso si no lo dio). Si el mensaje no trae nada que registrar, contesta con una frase corta y no llames herramientas.',
+    'Después de llamar las herramientas puedes añadir una frase corta; el sistema ya muestra lo guardado y los totales del día.'
+  ].join('\n');
+}
+
+function aRegistro(nombre, a, pedido) {
+  var f = a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha) ? a.fecha : pedido.hoy;
+  var copia = {};
+  Object.keys(a).forEach(function (k) { copia[k] = a[k]; });
+  copia.fecha = f;
+  return copia;
+}
+
+function ejecutarHerramienta(nombre, a, pedido) {
+  var r, f;
+  if (nombre === 'registrar_comida') {
+    f = aRegistro(nombre, a, pedido);
+    if (!f.hora) f.hora = pedido.hora;
+    r = conBloqueo(function () { return agregar('comidas', f); });
+    return { tabla: 'comidas', id: r.id, fecha: f.fecha, texto: cap(f.tipo_comida) + ': ' + f.descripcion + ' · ' + redond(f.kcal) + ' kcal · ' + redond(f.proteina_g) + ' g proteína' + (f.estimado ? ' (estimado)' : '') };
+  }
+  if (nombre === 'registrar_medidas') {
+    f = aRegistro(nombre, a, pedido);
+    conBloqueo(function () { return guardarMedidas(f); });
+    var partes = [];
+    if (f.peso_kg != null) partes.push(f.peso_kg + ' kg');
+    if (f.cintura_cm != null) partes.push('cintura ' + f.cintura_cm + ' cm');
+    if (f.horas_sueno != null) partes.push(f.horas_sueno + ' h de sueño');
+    return { tabla: 'medidas', id: null, fecha: f.fecha, texto: 'Medidas: ' + partes.join(' · ') };
+  }
+  if (nombre === 'registrar_ejercicio') {
+    f = aRegistro(nombre, a, pedido);
+    if (!f.fuente) f.fuente = 'manual';
+    r = conBloqueo(function () { return agregar('ejercicio', f); });
+    return { tabla: 'ejercicio', id: r.id, fecha: f.fecha, texto: cap(f.tipo) + (f.duracion_min ? ' · ' + f.duracion_min + ' min' : '') + (f.kcal != null ? ' · ' + redond(f.kcal) + ' kcal' : '') };
+  }
+  if (nombre === 'registrar_serie_gym') {
+    f = aRegistro(nombre, a, pedido);
+    r = conBloqueo(function () { return agregar('series_gym', f); });
+    return { tabla: 'series_gym', id: r.id, fecha: f.fecha, texto: f.ejercicio + ' · serie ' + f.numero_serie + ': ' + f.peso_kg + ' kg × ' + f.repeticiones };
+  }
+  throw new Error('Herramienta desconocida');
+}
+
+function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+function redond(n) { return n == null ? '?' : Math.round(Number(n) * 10) / 10; }
+
+function llamarClaude(pedido, mensajes) {
+  var cuerpo = {
+    model: PropertiesService.getScriptProperties().getProperty('MODELO') || MODELO_POR_DEFECTO,
+    max_tokens: 2048,
+    system: promptSistema(pedido.hoy, pedido.hora),
+    messages: mensajes,
+    tools: HERRAMIENTAS,
+    output_config: { effort: 'low' },
+    fallbacks: 'default'
+  };
+  var resp = UrlFetchApp.fetch(API_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    headers: { 'x-api-key': claveApi(), 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
+    payload: JSON.stringify(cuerpo)
+  });
+  var codigo = resp.getResponseCode();
+  var json;
+  try { json = JSON.parse(resp.getContentText()); } catch (e) { json = {}; }
+  if (codigo !== 200) {
+    var detalle = json && json.error && json.error.message ? ': ' + String(json.error.message).slice(0, 200) : '';
+    throw new Error('El chat no pudo responder (código ' + codigo + ')' + detalle);
+  }
+  return json;
+}
+
+function chat(pedido) {
+  if (!claveApi()) throw new Error('El chat no está activado: falta la propiedad ANTHROPIC_API_KEY.');
+  var texto = String(pedido.texto || '').trim().slice(0, 1000);
+  if (!texto) throw new Error('Escribe un mensaje.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pedido.hoy || '')) throw new Error('Fecha inválida');
+  if (!/^\d{2}:\d{2}$/.test(pedido.hora || '')) pedido.hora = '12:00';
+
+  var mensajes = [];
+  (Array.isArray(pedido.historial) ? pedido.historial.slice(-8) : []).forEach(function (m) {
+    if (m && (m.rol === 'user' || m.rol === 'assistant') && typeof m.texto === 'string' && m.texto) {
+      mensajes.push({ role: m.rol, content: m.texto.slice(0, 1000) });
+    }
+  });
+  // la API exige que empiece con "user" y alterne
+  while (mensajes.length && mensajes[0].role !== 'user') mensajes.shift();
+  var limpio = [];
+  mensajes.forEach(function (m) {
+    if (limpio.length && limpio[limpio.length - 1].role === m.role) limpio[limpio.length - 1].content += '\n' + m.content;
+    else limpio.push(m);
+  });
+  if (limpio.length && limpio[limpio.length - 1].role === 'user') limpio.pop();
+  limpio.push({ role: 'user', content: texto });
+
+  var r = llamarClaude(pedido, limpio);
+  if (r.stop_reason === 'refusal') return { ok: true, respuesta: 'No pude procesar ese mensaje. Prueba escribiéndolo de otra forma.', guardados: [] };
+
+  var textos = [], guardados = [], fallos = [], fechas = {};
+  (r.content || []).forEach(function (b) {
+    if (b.type === 'text' && b.text) textos.push(b.text.trim());
+    if (b.type === 'tool_use') {
+      try {
+        var g = ejecutarHerramienta(b.name, b.input || {}, pedido);
+        guardados.push({ tabla: g.tabla, id: g.id, texto: g.texto });
+        if (g.tabla === 'comidas') fechas[g.fecha] = true;
+      } catch (e) {
+        fallos.push('No guardé ' + b.name.replace('registrar_', '').replace('_', ' ') + ': ' + e.message);
+      }
+    }
+  });
+
+  var partes = [];
+  if (guardados.length) partes.push('Guardé:\n' + guardados.map(function (g) { return '• ' + g.texto; }).join('\n'));
+  fallos.forEach(function (f) { partes.push(f); });
+  Object.keys(fechas).forEach(function (f) { partes.push(totalesDelDia(f, f === pedido.hoy)); });
+  if (textos.length) partes.push(textos.join('\n'));
+  if (!partes.length) partes.push('No entendí qué registrar. ¿Puedes darme más detalle?');
+  return { ok: true, respuesta: partes.join('\n\n'), guardados: guardados };
+}
+
+function totalesDelDia(fecha, esHoy) {
+  var d = dia(fecha), kcal = 0, prot = 0;
+  d.comidas.forEach(function (c) { kcal += Number(c.kcal) || 0; prot += Number(c.proteina_g) || 0; });
+  var m = d.metas, pmin = m.proteina_min_g != null ? m.proteina_min_g : 130;
+  var extra = 0;
+  d.ejercicio.forEach(function (e) { extra += Number(e.kcal) || 0; });
+  var base = m.kcal_base != null ? m.kcal_base : 2500;
+  var def = ((m.deficit_min_kcal != null ? m.deficit_min_kcal : 200) + (m.deficit_max_kcal != null ? m.deficit_max_kcal : 300)) / 2;
+  var meta = base + extra - def, quedan = Math.round(meta - kcal);
+  return (esHoy ? 'Hoy' : 'Ese día') + ' llevas ' + Math.round(kcal) + ' kcal y ' + Math.round(prot) + ' g de proteína. ' +
+    (quedan >= 0 ? 'Te quedan ' + quedan + ' kcal' : 'Te pasaste ' + (-quedan) + ' kcal') +
+    (prot >= pmin ? ' y ya llegaste a tu meta de proteína.' : ' y te faltan ' + Math.round(pmin - prot) + ' g de proteína para la meta de ' + pmin + ' g.');
 }

@@ -81,7 +81,7 @@ dialog::backdrop { background: rgba(20,40,30,.4); }
 .hoja { background: var(--bg); border-radius: 28px 28px 0 0; padding: 16px 20px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; max-height: 92vh; overflow-y: auto; }
 .hoja h3 { margin: 0; font-size: 18px; font-weight: 800; }
 .hoja-cab { display: flex; justify-content: space-between; align-items: center; }
-.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: #fff; padding: 4px; border-radius: 999px; }
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; background: #fff; padding: 4px; border-radius: 999px; }
 .tabs button { border: 0; background: transparent; border-radius: 999px; min-height: 40px; font-weight: 700; font-size: 14px; color: var(--sub); }
 .tabs button.on { background: var(--ink); color: #fff; }
 label { display: block; font-size: 12px; color: var(--sub); font-weight: 600; margin: 8px 0 4px; }
@@ -104,3 +104,13 @@ input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--li
 .toast.ver { transform: translate(-50%, 0); }
 .toast.err { background: var(--err); }
 .cargando { opacity: .55; pointer-events: none; }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; gap: 8px; }
+.chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto; padding: 2px; }
+.burbuja { max-width: 90%; padding: 10px 14px; border-radius: 18px; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+.burbuja.yo { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+.burbuja.ia { align-self: flex-start; background: #fff; border-bottom-left-radius: 6px; }
+.burbuja.error { background: #FCE8E6; color: var(--err); }
+.deshacer { display: block; margin-top: 8px; border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; min-height: 36px; text-align: left; }
+.deshacer:disabled { opacity: .55; }
