@@ -42,7 +42,7 @@ Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya
 No necesitas configurar nada extra para esto. Funciona con tu plan de Claude y no gasta créditos de la Consola de API.
 
 1. En la app, toca **+** y abre la pestaña **Pegar**.
-2. Toca **Copiar instrucciones para Claude** y pégalas **una sola vez** en un chat de Claude (mejor dentro de un Proyecto, para que las recuerde).
+2. Toca **Copiar instrucciones para Claude** y pégalas **una sola vez** en un chat de Claude (mejor dentro de un Proyecto, para que las recuerde). Las instrucciones traen tus metas desde tu hoja y una línea `Mi perfil: [escribe aquí tu edad, estatura, peso y objetivo]`: cámbiala por tus datos antes de enviar.
 3. Desde ahí, cuéntale a Claude lo que comiste, tu peso, tu sueño o tu ejercicio. Él estima calorías y macros, te dice cuánto llevas del día contra tus metas y te devuelve **un bloque de datos** al final.
 4. Copia ese bloque, pégalo en la pestaña **Pegar** y toca **Revisar**. Ves la lista de lo que se va a guardar, y si está bien, **Guardar**.
 
@@ -78,7 +78,15 @@ Esto es otra forma, más cómoda pero con costo: el chat vive dentro de la app y
 
 ## Paso 7. Publicar la app
 
-1. En GitHub: tu repositorio → **Settings → Pages**.
+En el plan gratis, GitHub Pages solo funciona con un repositorio **público**. Si ves el mensaje "Upgrade or make this repository public to enable Pages", haz esto primero:
+
+1. En GitHub: tu repositorio → **Settings → General**, baja hasta **Danger Zone → Change repository visibility → Make public**, y confirma.
+
+**Qué se ve cuando es público:** el código y este README. No se ven tus datos (viven en tu hoja de Google), ni tu contraseña, ni tu clave de API. La dirección de tu servicio de Google irá en `config.js`: por sí sola no sirve, porque sin tu contraseña no devuelve nada. No escribas en el repositorio datos personales como tu edad, peso o estatura; el perfil se lo escribes a Claude en tu chat.
+
+Luego:
+
+1. **Settings → Pages**.
 2. **Deploy from a branch**, rama `main`, carpeta `/ (root)`. Guarda.
 3. En un par de minutos tendrás tu dirección, algo como `https://TU-USUARIO.github.io/fitness-tracker/`.
 

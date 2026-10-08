@@ -311,9 +311,22 @@ var HERRAMIENTAS = [
   }
 ];
 
-function promptSistema(hoy, hora) {
+function textoMetas() {
+  var m = {};
+  leer('metas').forEach(function (x) { m[x.clave] = x.valor; });
+  var p = [];
+  if (m.proteina_min_g != null && m.proteina_max_g != null) p.push('proteína de ' + m.proteina_min_g + ' a ' + m.proteina_max_g + ' g al día');
+  if (m.kcal_base != null) {
+    p.push('calorías base ' + m.kcal_base + ' kcal más el ejercicio del día' +
+      (m.deficit_min_kcal != null && m.deficit_max_kcal != null ? ', con déficit de ' + m.deficit_min_kcal + ' a ' + m.deficit_max_kcal + ' kcal en días normales' : ''));
+  }
+  return p.length ? 'Metas del usuario: ' + p.join('; ') + '.' : '';
+}
+
+function promptSistema(hoy, hora, metas) {
   return [
-    'Eres el asistente de seguimiento personal de un hombre de 41 años (1,72 m, unos 72 kg) que busca ganar masa muscular y reducir grasa abdominal.',
+    'Eres el asistente de seguimiento personal de alimentación, ejercicio, peso, cintura y sueño del usuario.',
+    metas || '',
     'Tu trabajo: leer lo que escribe y GUARDAR los datos con las herramientas. Responde siempre en español, breve y claro; unidades kg, cm y kcal.',
     'Fecha de hoy: ' + hoy + '. Hora actual: ' + hora + '. Si dice "ayer", "anoche" o un día, calcula la fecha.',
     'Comidas: estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.',
@@ -369,7 +382,7 @@ function llamarClaude(pedido, mensajes) {
   var cuerpo = {
     model: PropertiesService.getScriptProperties().getProperty('MODELO') || MODELO_POR_DEFECTO,
     max_tokens: 2048,
-    system: promptSistema(pedido.hoy, pedido.hora),
+    system: promptSistema(pedido.hoy, pedido.hora, textoMetas()),
     messages: mensajes,
     tools: HERRAMIENTAS,
     output_config: { effort: 'low' },
