@@ -82,7 +82,7 @@
     toastT = setTimeout(function () {
       t.className = "toast";
       try { if (t.hidePopover && t.matches(":popover-open")) t.hidePopover(); } catch (e) { /* nada */ }
-    }, 3200);
+    }, error ? 9000 : 3200);
   }
 
   // ---------- Contraseña y conexión con Google ----------
@@ -97,7 +97,21 @@
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita la petición previa que Google no admite
       body: JSON.stringify(cuerpo)
-    }).then(function (r) { return r.json(); }).then(function (j) {
+    }).catch(function (x) {
+      var e = new Error("No se pudo conectar con tu servicio de Google. Revisa tu internet y la dirección de config.js.");
+      e.red = true;
+      e.detalle = String((x && x.message) || x);
+      throw e;
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        try { return JSON.parse(t); } catch (x) {
+          var e = new Error("Tu servicio de Google respondió algo que no es de la app: puede ser una dirección de implementación vieja o el acceso mal configurado.");
+          e.formato = true;
+          e.detalle = "HTTP " + r.status + " · " + t.replace(/\s+/g, " ").slice(0, 140);
+          throw e;
+        }
+      });
+    }).then(function (j) {
       if (!j.ok) {
         var e = new Error(j.error || "Error");
         e.noAutorizado = j.error === "No autorizado";
@@ -106,9 +120,15 @@
       return j;
     });
   }
+  function textoError(e) {
+    return ((e && e.message) || "Error") + (e && e.detalle ? " (Detalle: " + e.detalle + ")" : "");
+  }
   function manejarError(e) {
     if (e && e.noAutorizado) { borrarToken(); tokenMemoria = ""; pantallaEntrada("La contraseña no es correcta."); return; }
-    aviso(e && e.message && !/fetch|network|Failed/i.test(e.message) ? e.message : "No hay conexión con tu hoja de Google.", true);
+    var msg = textoError(e);
+    var enEntrada = document.querySelector(".entrada .error");
+    if (enEntrada) enEntrada.textContent = msg;
+    aviso(msg, true);
   }
 
   // ---------- Estado ----------
@@ -124,8 +144,8 @@
       var t = campo.value.trim();
       if (!t) return;
       err.textContent = "Comprobando…";
-      api("ping", {}, t).then(function () { guardarToken(t); tokenMemoria = t; cargar(); })
-        .catch(function (e) { err.textContent = e.noAutorizado ? "La contraseña no es correcta." : "No hay conexión con tu hoja de Google."; });
+      api("ping", {}, t).then(function () { guardarToken(t); tokenMemoria = t; err.textContent = "Contraseña correcta. Cargando tus datos…"; cargar(); })
+        .catch(function (e) { err.textContent = e.noAutorizado ? "La contraseña no es correcta." : textoError(e); });
     };
     campo.addEventListener("keydown", function (e) { if (e.key === "Enter") ir(); });
     raiz.appendChild(h("div", { class: "entrada" },
