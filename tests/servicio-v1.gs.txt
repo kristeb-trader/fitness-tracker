@@ -1,16 +1,11 @@
 /**
  * Mi seguimiento: servicio que conecta la app con tu hoja de Google.
- * Se pega en la hoja: Extensiones > Apps Script. La app te avisa si hay una versión nueva.
- *
- * Este servicio solo lee, guarda y borra filas; los cálculos los hace la app.
- * Así los arreglos futuros llegan solos con la app y casi nunca hay que tocar este código.
+ * Se pega UNA vez en la hoja: Extensiones > Apps Script.
  *
  * Seguridad: toda petición debe traer la contraseña guardada en
  * Configuración del proyecto > Propiedades de la secuencia de comandos > TOKEN.
  * La contraseña NO está en este archivo ni en el repositorio.
  */
-
-var VERSION = 2;
 
 var TABLAS = {
   comidas: [
@@ -60,8 +55,6 @@ var TABLAS = {
   ]
 };
 
-var EDITABLES = { comidas: true, ejercicio: true, series_gym: true };
-
 var METAS_INICIALES = [
   ['proteina_min_g', 130],
   ['proteina_max_g', 160],
@@ -70,44 +63,29 @@ var METAS_INICIALES = [
   ['deficit_max_kcal', 300]
 ];
 
-/**
- * Crea las pestañas y las metas iniciales. Se puede ejecutar varias veces:
- * no borra ni cambia filas que ya existan.
- */
+/** Ejecútala UNA vez desde el editor: crea las pestañas y las metas iniciales. */
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(TABLAS).forEach(function (nombre) {
-    var h = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
-    asegurarEncabezados(h, nombre);
-    h.setFrozenRows(1);
-    // Solo las filas vacías: así Sheets no convierte «2026-10-09» en otra cosa.
-    var ultima = Math.max(h.getLastRow(), 1);
-    var max = h.getMaxRows();
-    if (max > ultima) {
-      encabezados(h).forEach(function (c, i) {
-        if (esColumnaTexto(nombre, c)) h.getRange(ultima + 1, i + 1, max - ultima, 1).setNumberFormat('@');
-      });
-    }
+    var cols = TABLAS[nombre].map(function (k) { return k.c; });
+    var hoja = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
+    hoja.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
+    hoja.setFrozenRows(1);
+    TABLAS[nombre].forEach(function (k, i) {
+      // fecha y hora como texto, para que Sheets no las convierta en fechas raras
+      if (k.t === 'fecha' || k.t === 'hora' || k.t === 'id') hoja.getRange(2, i + 1, Math.max(hoja.getMaxRows() - 1, 1), 1).setNumberFormat('@');
+    });
   });
   var metas = ss.getSheetByName('metas');
-  if (metas.getLastRow() < 2) metas.getRange(2, 1, METAS_INICIALES.length, 2).setValues(METAS_INICIALES);
+  if (metas.getLastRow() < 2) {
+    metas.getRange(2, 1, METAS_INICIALES.length, 2).setValues(METAS_INICIALES);
+  }
   var vacia = ss.getSheetByName('Hoja 1') || ss.getSheetByName('Sheet1');
   if (vacia && vacia.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(vacia);
 }
 
-/** Diagnóstico: ejecútala desde el editor y mira el «Registro de ejecución». No cambia nada. */
-function probar() {
-  Logger.log('Versión del servicio: ' + VERSION + ' · zona de la hoja: ' + zona());
-  Logger.log('Contraseña (TOKEN) configurada: ' + (leerToken().length >= 16 ? 'sí' : 'NO o muy corta (mínimo 16 caracteres)'));
-  ['comidas', 'ejercicio', 'series_gym', 'medidas'].forEach(function (n) {
-    var filas = leer(n);
-    var fechas = filas.map(function (f) { return f.fecha; }).filter(Boolean).sort();
-    Logger.log(n + ': ' + filas.length + ' filas' + (fechas.length ? ' · fechas de ' + fechas[0] + ' a ' + fechas[fechas.length - 1] : ''));
-  });
-}
-
 function doGet() {
-  return salida({ ok: true, servicio: 'mi-seguimiento', version: VERSION });
+  return salida({ ok: true, servicio: 'mi-seguimiento' });
 }
 
 function doPost(e) {
@@ -115,9 +93,8 @@ function doPost(e) {
     var pedido = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (!tokenValido(pedido.token)) return salida({ ok: false, error: 'No autorizado' });
     switch (pedido.accion) {
-      case 'ping': return salida({ ok: true, version: VERSION, chat: !!claveApi() });
-      case 'leer': return salida(leerTodo(pedido.desde));
-      case 'dia': return salida({ ok: true, version: VERSION, datos: dia(pedido.fecha) });
+      case 'ping': return salida({ ok: true });
+      case 'dia': return salida({ ok: true, datos: dia(pedido.fecha) });
       case 'agregar': return salida(conBloqueo(function () { return agregar(pedido.tabla, pedido.fila); }));
       case 'medidas': return salida(conBloqueo(function () { return guardarMedidas(pedido.fila); }));
       case 'borrar': return salida(conBloqueo(function () { return borrar(pedido.tabla, pedido.id); }));
@@ -135,15 +112,9 @@ function salida(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function leerToken() {
-  return String(PropertiesService.getScriptProperties().getProperty('TOKEN') || '').trim();
-}
-
 function tokenValido(recibido) {
-  var real = leerToken();
-  if (typeof recibido !== 'string') return false;
-  recibido = recibido.trim();
-  if (real.length < 16 || recibido.length !== real.length) return false;
+  var real = PropertiesService.getScriptProperties().getProperty('TOKEN');
+  if (!real || real.length < 16 || typeof recibido !== 'string' || recibido.length !== real.length) return false;
   var diff = 0;
   for (var i = 0; i < real.length; i++) diff |= real.charCodeAt(i) ^ recibido.charCodeAt(i);
   return diff === 0;
@@ -157,126 +128,59 @@ function conBloqueo(fn) {
 
 function hoja(nombre) {
   var h = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
-  if (!h) throw new Error('Falta la pestaña "' + nombre + '". En Apps Script, ejecuta la función setup.');
+  if (!h) throw new Error('Falta la pestaña "' + nombre + '". Ejecuta setup().');
   return h;
 }
 
-var zonaCache = null;
-function zona() {
-  if (!zonaCache) zonaCache = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || 'UTC';
-  return zonaCache;
-}
-
-function dos(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
-
-function tipoColumna(nombre, col) {
-  var t = (TABLAS[nombre] || []).filter(function (k) { return k.c === col; })[0];
-  return t ? t.t : null;
-}
-
-function esColumnaTexto(nombre, col) {
-  var t = tipoColumna(nombre, col);
-  return t === 'fecha' || t === 'hora' || t === 'id';
-}
-
-/** Cualquier forma en que Sheets o una persona guarde una fecha → «AAAA-MM-DD». */
-function normFecha(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  if (v instanceof Date) return Utilities.formatDate(v, zona(), 'yyyy-MM-dd');
-  if (typeof v === 'number') {
-    // Número de serie de Sheets: días desde el 30/12/1899
-    if (v > 20000 && v < 80000) return Utilities.formatDate(new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000), 'UTC', 'yyyy-MM-dd');
-    return String(v);
+/** Sheets puede guardar «2026-10-09» como una fecha real. La devolvemos siempre como texto. */
+function comoTexto(v, tipo) {
+  if (v instanceof Date) {
+    var zona = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    return Utilities.formatDate(v, zona, tipo === 'hora' ? 'HH:mm' : 'yyyy-MM-dd');
   }
-  var s = String(v).trim();
-  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return m[1] + '-' + dos(m[2]) + '-' + dos(m[3]);
-  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/); // día/mes/año
-  if (m) return m[3] + '-' + dos(m[2]) + '-' + dos(m[1]);
-  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
-    var d = new Date(s);
-    if (!isNaN(d.getTime())) return Utilities.formatDate(d, zona(), 'yyyy-MM-dd');
-  }
-  return s;
-}
-
-/** Cualquier forma de hora → «HH:MM». */
-function normHora(v) {
-  if (v === '' || v === null || v === undefined) return null;
-  if (v instanceof Date) return Utilities.formatDate(v, zona(), 'HH:mm');
-  if (typeof v === 'number' && v >= 0 && v < 1) {
-    var min = Math.round(v * 1440);
-    return dos(Math.floor(min / 60) % 24) + ':' + dos(min % 60);
-  }
-  var m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
-  return m ? dos(m[1]) + ':' + m[2] : String(v).trim();
-}
-
-function normalizar(v, tipo) {
-  if (v === '' || v === null || v === undefined) return null;
-  if (tipo === 'fecha') return normFecha(v);
-  if (tipo === 'hora') return normHora(v);
-  if (v instanceof Date) return Utilities.formatDate(v, zona(), "yyyy-MM-dd'T'HH:mm:ss");
   return v;
 }
 
-function encabezados(h) {
-  var n = h.getLastColumn();
-  if (n < 1) return [];
-  return h.getRange(1, 1, 1, n).getValues()[0].map(function (x) { return String(x).trim(); });
+function tipoColumna(nombre, col) {
+  var t = TABLAS[nombre].filter(function (k) { return k.c === col; })[0];
+  return t ? t.t : null;
 }
 
-/** Escribe los encabezados si la pestaña está vacía, o agrega al final los que falten. */
-function asegurarEncabezados(h, nombre) {
-  var cols = TABLAS[nombre].map(function (k) { return k.c; });
-  var enc = encabezados(h);
-  if (!enc.some(function (x) { return x; })) {
-    h.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight('bold');
-    return cols;
-  }
-  cols.forEach(function (c) {
-    if (enc.indexOf(c) < 0) {
-      enc.push(c);
-      h.getRange(1, enc.length).setValue(c).setFontWeight('bold');
-    }
-  });
-  return enc;
-}
-
-/** Filas de una pestaña como objetos, con fechas y horas siempre como texto. */
 function leer(nombre) {
   var valores = hoja(nombre).getDataRange().getValues();
-  if (!valores.length) return [];
-  var cols = valores[0].map(function (x) { return String(x).trim(); });
+  var cols = valores[0];
   return valores.slice(1)
-    .filter(function (f) { return f.some(function (v) { return v !== '' && v !== null; }); })
+    .filter(function (f) { return f.some(function (v) { return v !== ''; }); })
     .map(function (f) {
       var o = {};
-      cols.forEach(function (c, i) { if (c) o[c] = normalizar(f[i], tipoColumna(nombre, c)); });
+      cols.forEach(function (c, i) { o[c] = f[i] === '' ? null : comoTexto(f[i], tipoColumna(nombre, c)); });
       return o;
     });
 }
 
-/** Agrega una fila según los encabezados reales de la pestaña, con fecha, hora e id como texto. */
+/** Agrega una fila nueva forzando texto en fecha, hora e id, para que Sheets no las convierta. */
 function escribirFila(h, nombre, obj) {
-  var enc = asegurarEncabezados(h, nombre);
+  var cols = TABLAS[nombre];
   var r = h.getLastRow() + 1;
-  enc.forEach(function (c, i) {
-    if (esColumnaTexto(nombre, c)) h.getRange(r, i + 1).setNumberFormat('@');
-  });
-  var valores = enc.map(function (c) { return obj[c] === null || obj[c] === undefined ? '' : obj[c]; });
-  h.getRange(r, 1, 1, enc.length).setValues([valores]);
+  var i = 0;
+  while (i < cols.length) {
+    var esTexto = cols[i].t === 'fecha' || cols[i].t === 'hora' || cols[i].t === 'id';
+    var j = i;
+    while (j < cols.length && (cols[j].t === 'fecha' || cols[j].t === 'hora' || cols[j].t === 'id') === esTexto) j++;
+    if (esTexto) h.getRange(r, i + 1, 1, j - i).setNumberFormat('@');
+    i = j;
+  }
+  h.getRange(r, 1, 1, cols.length).setValues([fila(nombre, obj)]);
 }
 
 function ahora() { return new Date().toISOString(); }
 
-/** Valida una fila contra el esquema y devuelve el objeto limpio. Acepta variantes comunes. */
+/** Valida una fila contra el esquema y devuelve el objeto limpio. */
 function validar(nombre, fila) {
   if (!fila || typeof fila !== 'object') throw new Error('Datos vacíos');
   var out = {};
   TABLAS[nombre].forEach(function (k) {
     var v = fila[k.c];
-    if (typeof v === 'string') v = v.trim();
     if (k.t === 'id') { out[k.c] = Utilities.getUuid(); return; }
     if (k.t === 'ts') { out[k.c] = ahora(); return; }
     if (v === undefined || v === null || v === '') {
@@ -285,59 +189,37 @@ function validar(nombre, fila) {
       return;
     }
     if (k.t === 'fecha') {
-      v = normFecha(v);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('Fecha inválida (usa AAAA-MM-DD)');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('Fecha inválida');
     } else if (k.t === 'hora') {
-      v = normHora(v);
-      if (!/^\d{2}:\d{2}$/.test(v)) throw new Error('Hora inválida (usa HH:MM)');
+      if (!/^\d{2}:\d{2}$/.test(v)) throw new Error('Hora inválida');
     } else if (k.t === 'num') {
-      v = Number(typeof v === 'string' ? v.replace(',', '.') : v);
+      v = Number(v);
       if (!isFinite(v)) throw new Error(k.c + ' debe ser un número');
       if (k.min !== undefined && v < k.min) throw new Error(k.c + ' es menor que ' + k.min);
       if (k.max !== undefined && v > k.max) throw new Error(k.c + ' es mayor que ' + k.max);
       if (k.ent && Math.floor(v) !== v) throw new Error(k.c + ' debe ser entero');
     } else if (k.t === 'bool') {
-      v = v === true || /^(true|verdadero|s[ií]|1|yes)$/i.test(String(v));
+      v = v === true;
     } else {
       v = String(v).slice(0, 500);
-      if (k.op) {
-        v = v.toLowerCase();
-        if (k.op.indexOf(v) < 0) throw new Error(k.c + ' no es válido (usa: ' + k.op.join(', ') + ')');
-      }
+      if (k.op && k.op.indexOf(v) < 0) throw new Error(k.c + ' no es válido');
     }
     out[k.c] = v;
   });
   return out;
 }
 
-// ---------- acciones ----------
-
-/** Todo lo que necesita la app: metas, medidas completas y el resto desde una fecha. */
-function leerTodo(desde) {
-  var d = normFecha(desde);
-  var filtrar = function (filas) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? filas.filter(function (f) { return !f.fecha || f.fecha >= d; }) : filas;
-  };
-  var metas = {};
-  leer('metas').forEach(function (m) { if (m.clave) metas[String(m.clave).trim()] = Number(m.valor); });
-  return {
-    ok: true,
-    version: VERSION,
-    chat: !!claveApi(),
-    desde: d,
-    metas: metas,
-    medidas: leer('medidas'),
-    comidas: filtrar(leer('comidas')),
-    ejercicio: filtrar(leer('ejercicio')),
-    series_gym: filtrar(leer('series_gym'))
-  };
+function fila(nombre, obj) {
+  return TABLAS[nombre].map(function (k) { return obj[k.c] === null ? '' : obj[k.c]; });
 }
 
+// ---------- acciones ----------
+
 function agregar(nombre, datos) {
-  if (!EDITABLES[nombre]) throw new Error('Tabla no permitida');
+  if (nombre !== 'comidas' && nombre !== 'ejercicio' && nombre !== 'series_gym') throw new Error('Tabla no permitida');
   var obj = validar(nombre, datos);
   escribirFila(hoja(nombre), nombre, obj);
-  return { ok: true, id: obj.id, fecha: obj.fecha };
+  return { ok: true, id: obj.id };
 }
 
 /** Una fila por día. Solo actualiza los campos que vienen llenos. */
@@ -345,62 +227,63 @@ function guardarMedidas(datos) {
   var obj = validar('medidas', datos);
   if (obj.peso_kg === null && obj.cintura_cm === null && obj.horas_sueno === null) throw new Error('Escribe al menos un dato');
   var h = hoja('medidas');
-  var enc = asegurarEncabezados(h, 'medidas');
   var valores = h.getDataRange().getValues();
-  var fi = enc.indexOf('fecha');
+  var cols = valores[0];
+  var idx = {};
+  cols.forEach(function (c, i) { idx[c] = i; });
   for (var r = 1; r < valores.length; r++) {
-    if (normFecha(valores[r][fi]) === obj.fecha) {
+    if (String(comoTexto(valores[r][idx.fecha], 'fecha')) === obj.fecha) {
       ['peso_kg', 'cintura_cm', 'horas_sueno'].forEach(function (c) {
-        if (obj[c] !== null) h.getRange(r + 1, enc.indexOf(c) + 1).setValue(obj[c]);
+        if (obj[c] !== null) h.getRange(r + 1, idx[c] + 1).setValue(obj[c]);
       });
-      return { ok: true, actualizado: true, fecha: obj.fecha };
+      return { ok: true, actualizado: true };
     }
   }
   escribirFila(h, 'medidas', obj);
-  return { ok: true, actualizado: false, fecha: obj.fecha };
+  return { ok: true, actualizado: false };
 }
 
 function borrar(nombre, id) {
-  if (!EDITABLES[nombre]) throw new Error('Tabla no permitida');
+  if (nombre !== 'comidas' && nombre !== 'ejercicio' && nombre !== 'series_gym') throw new Error('Tabla no permitida');
   var h = hoja(nombre);
   var valores = h.getDataRange().getValues();
-  var ci = valores[0].map(function (x) { return String(x).trim(); }).indexOf('id');
+  var ci = valores[0].indexOf('id');
   for (var r = 1; r < valores.length; r++) {
-    if (String(valores[r][ci]).trim() === String(id).trim()) { h.deleteRow(r + 1); return { ok: true }; }
+    if (String(valores[r][ci]) === String(id)) { h.deleteRow(r + 1); return { ok: true }; }
   }
   throw new Error('No se encontró el registro');
 }
 
-/** Resumen de un día (lo usa el chat con API y las versiones anteriores de la app). */
+/** Todo lo que necesita la pantalla "Hoy" en una sola llamada. */
 function dia(fecha) {
-  fecha = normFecha(fecha);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) throw new Error('Fecha inválida');
-  var t = leerTodo(null);
-  var medidas = t.medidas.filter(function (m) { return m.fecha; }).sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
+  var metas = {};
+  leer('metas').forEach(function (m) { metas[m.clave] = m.valor; });
+  var medidas = leer('medidas').sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
   var hastaHoy = medidas.filter(function (m) { return m.fecha <= fecha; });
-  var conPeso = hastaHoy.filter(function (m) { return m.peso_kg !== null && m.peso_kg !== undefined; });
-  var conCintura = hastaHoy.filter(function (m) { return m.cintura_cm !== null && m.cintura_cm !== undefined; });
+  var mismoDia = medidas.filter(function (m) { return m.fecha === fecha; })[0] || null;
+  var conPeso = hastaHoy.filter(function (m) { return m.peso_kg !== null; });
+  var conCintura = hastaHoy.filter(function (m) { return m.cintura_cm !== null; });
   return {
-    chat: t.chat,
-    metas: t.metas,
-    comidas: t.comidas.filter(function (c) { return c.fecha === fecha; })
+    chat: !!claveApi(),
+    metas: metas,
+    comidas: leer('comidas').filter(function (c) { return c.fecha === fecha; })
       .sort(function (a, b) { return String(a.hora || '') < String(b.hora || '') ? -1 : 1; }),
-    ejercicio: t.ejercicio.filter(function (e) { return e.fecha === fecha; }),
-    series_gym: t.series_gym.filter(function (s) { return s.fecha === fecha; }),
-    medida: medidas.filter(function (m) { return m.fecha === fecha; })[0] || null,
+    ejercicio: leer('ejercicio').filter(function (e) { return e.fecha === fecha; }),
+    medida: mismoDia,
     ultimoPeso: conPeso.length ? conPeso[conPeso.length - 1] : null,
     ultimaCintura: conCintura.length ? conCintura[conCintura.length - 1] : null,
     pesos: conPeso.slice(-7).map(function (m) { return { fecha: m.fecha, peso_kg: m.peso_kg }; })
   };
 }
 
-// ---------- Chat opcional: Claude estima y guarda lo que escribes ----------
-// Solo funciona si agregas la propiedad ANTHROPIC_API_KEY (opcional: MODELO). Gasta créditos de la API.
+// ---------- Chat: Claude estima y guarda lo que escribes ----------
+// Requiere la propiedad ANTHROPIC_API_KEY (opcional: MODELO). Nunca va en el repositorio.
 
 var API_URL = 'https://api.anthropic.com/v1/messages';
 var MODELO_POR_DEFECTO = 'claude-opus-5-5';
 
-function claveApi() { return String(PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY') || '').trim(); }
+function claveApi() { return PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY') || ''; }
 
 var NUM = { type: 'number' };
 var HERRAMIENTAS = [
@@ -482,24 +365,24 @@ function promptSistema(hoy, hora, metas) {
   ].join('\n');
 }
 
-function aRegistro(a, pedido) {
+function aRegistro(nombre, a, pedido) {
+  var f = a.fecha && /^\d{4}-\d{2}-\d{2}$/.test(a.fecha) ? a.fecha : pedido.hoy;
   var copia = {};
   Object.keys(a).forEach(function (k) { copia[k] = a[k]; });
-  var f = normFecha(a.fecha);
-  copia.fecha = /^\d{4}-\d{2}-\d{2}$/.test(f || '') ? f : pedido.hoy;
+  copia.fecha = f;
   return copia;
 }
 
 function ejecutarHerramienta(nombre, a, pedido) {
   var r, f;
   if (nombre === 'registrar_comida') {
-    f = aRegistro(a, pedido);
+    f = aRegistro(nombre, a, pedido);
     if (!f.hora) f.hora = pedido.hora;
     r = conBloqueo(function () { return agregar('comidas', f); });
     return { tabla: 'comidas', id: r.id, fecha: f.fecha, texto: cap(f.tipo_comida) + ': ' + f.descripcion + ' · ' + redond(f.kcal) + ' kcal · ' + redond(f.proteina_g) + ' g proteína' + (f.estimado ? ' (estimado)' : '') };
   }
   if (nombre === 'registrar_medidas') {
-    f = aRegistro(a, pedido);
+    f = aRegistro(nombre, a, pedido);
     conBloqueo(function () { return guardarMedidas(f); });
     var partes = [];
     if (f.peso_kg != null) partes.push(f.peso_kg + ' kg');
@@ -508,13 +391,13 @@ function ejecutarHerramienta(nombre, a, pedido) {
     return { tabla: 'medidas', id: null, fecha: f.fecha, texto: 'Medidas: ' + partes.join(' · ') };
   }
   if (nombre === 'registrar_ejercicio') {
-    f = aRegistro(a, pedido);
+    f = aRegistro(nombre, a, pedido);
     if (!f.fuente) f.fuente = 'manual';
     r = conBloqueo(function () { return agregar('ejercicio', f); });
     return { tabla: 'ejercicio', id: r.id, fecha: f.fecha, texto: cap(f.tipo) + (f.duracion_min ? ' · ' + f.duracion_min + ' min' : '') + (f.kcal != null ? ' · ' + redond(f.kcal) + ' kcal' : '') };
   }
   if (nombre === 'registrar_serie_gym') {
-    f = aRegistro(a, pedido);
+    f = aRegistro(nombre, a, pedido);
     r = conBloqueo(function () { return agregar('series_gym', f); });
     return { tabla: 'series_gym', id: r.id, fecha: f.fecha, texto: f.ejercicio + ' · serie ' + f.numero_serie + ': ' + f.peso_kg + ' kg × ' + f.repeticiones };
   }
@@ -583,7 +466,7 @@ function chat(pedido) {
     if (b.type === 'tool_use') {
       try {
         var g = ejecutarHerramienta(b.name, b.input || {}, pedido);
-        guardados.push({ tabla: g.tabla, id: g.id, texto: g.texto, fecha: g.fecha });
+        guardados.push({ tabla: g.tabla, id: g.id, texto: g.texto });
         if (g.tabla === 'comidas') fechas[g.fecha] = true;
       } catch (e) {
         fallos.push('No guardé ' + b.name.replace('registrar_', '').replace('_', ' ') + ': ' + e.message);

@@ -1,5 +1,5 @@
 // Guarda solo los archivos de la app para que abra rápido. Tus datos nunca se guardan aquí.
-const CACHE = "seguimiento-v1";
+const CACHE = "seguimiento-v2";
 const ARCHIVOS = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

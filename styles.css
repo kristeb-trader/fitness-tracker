@@ -116,3 +116,15 @@ input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--li
 .deshacer:disabled { opacity: .55; }
 
 [hidden] { display: none !important; }
+
+/* Aviso de servicio desactualizado */
+.banda { background: #FFF4D6; border: 1px solid #F2C879; border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.banda b { font-size: 15px; }
+.banda span { font-size: 13px; color: #5C4A1A; }
+.banda .btn { margin-top: 4px; min-height: 44px; }
+
+/* Ajustes */
+.hoja h4 { margin: 10px 0 0; font-size: 15px; font-weight: 800; }
+.pasos { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink); }
+.mini-btn { border: 1px solid var(--line); background: var(--bg); color: var(--err); border-radius: 999px; padding: 0 14px; min-height: 40px; font-weight: 700; font-size: 13px; flex: none; }
+.mini-btn:disabled { opacity: .5; }

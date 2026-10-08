@@ -7,8 +7,8 @@ Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya
 ## Cómo funciona (en simple)
 
 - **Tu hoja de Google** guarda todo, con una pestaña por tema: `comidas`, `ejercicio`, `series_gym`, `medidas` y `metas`. Puedes abrirla y editarla cuando quieras.
-- **Un pequeño servicio de Google** (Apps Script) conecta la hoja con la app. Tú lo pegas una sola vez.
-- **La app** es una página que se instala en tu celular como cualquier app.
+- **Un pequeño servicio de Google** (Apps Script) conecta la hoja con la app. Solo lee, guarda y borra filas, y entiende cualquier formato de fecha que Sheets use. Lo pegas una vez, y la app te avisa si alguna vez hay que actualizarlo.
+- **La app** es una página que se instala en tu celular como cualquier app. Hace todos los cálculos, así que los arreglos llegan solos cuando se fusiona un cambio en GitHub.
 - **La contraseña** vive solo en dos lugares: en tu servicio de Google y en tu celular. No está en este repositorio.
 
 ---
@@ -29,6 +29,8 @@ Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya
 1. Arriba, en el selector de funciones, elige **setup** y pulsa **Ejecutar**.
 2. Google pedirá permiso. Pulsa **Revisar permisos**, elige tu cuenta y, si sale "Google no ha verificado esta app", pulsa **Avanzado → Ir a (nombre del proyecto)**. Es seguro: es tu propio script y solo toca esta hoja.
 3. Vuelve a la hoja: ya debes ver las 5 pestañas, con tus metas iniciales en `metas`.
+
+`setup` se puede ejecutar otra vez sin riesgo: no borra ni cambia las filas que ya tienes. Para revisar tu hoja, ejecuta la función `probar` y mira el **Registro de ejecución**: muestra la versión del servicio y cuántas filas y qué fechas hay en cada pestaña.
 
 ## Paso 4. Crear tu contraseña
 
@@ -69,12 +71,14 @@ Esto es otra forma, más cómoda pero con costo: el chat vive dentro de la app y
 
 > "Cualquier usuario" solo significa que la dirección responde. Sin tu contraseña no devuelve ningún dato. No compartas la dirección ni la contraseña. Si crees que se filtró, cambia el valor de `TOKEN` y listo.
 >
-> Si algún día cambias `Code.gs`, hay que hacer **Implementar → Administrar implementaciones → editar → Nueva versión**.
+> Si algún día actualizas `Code.gs`, usa **Implementar → Administrar implementaciones → lápiz → Nueva versión**. No uses «Nueva implementación»: crea una dirección distinta. La app te guía con un botón que copia el código (Ajustes → Actualizar el servicio de Google).
 
 ## Paso 6. Conectar la app
 
-1. Abre `config.js` y reemplaza `https://script.google.com/macros/s/TU-ID/exec` por la dirección que copiaste.
-2. Guarda el cambio en GitHub.
+Elige una de dos formas:
+
+- **Desde la app (más fácil):** al abrirla la primera vez, si no encuentra la dirección, te la pide. También puedes cambiarla cuando quieras en **Ajustes → Cambiar la dirección del servicio**. Se guarda en ese dispositivo.
+- **En GitHub, para todos los dispositivos:** edita `config.js` y reemplaza la dirección. Antes de guardar, revisa que arriba a la izquierda diga la rama **`main`**, que es la que publica GitHub Pages.
 
 ## Paso 7. Publicar la app
 
@@ -100,24 +104,25 @@ Luego:
 
 ## Si algo falla
 
-La app ahora dice qué pasó. Qué significa cada mensaje:
+Primero abre **Ajustes → Estado de la conexión**. Ahí ves la versión de la app y del servicio, la dirección que se está usando y cuántos registros tiene el teléfono.
 
-| Mensaje | Qué significa | Qué hacer |
+| Lo que ves | Qué significa | Qué hacer |
 |---|---|---|
-| **Falta configurar** | `config.js` todavía tiene la dirección de ejemplo | Pega la dirección de tu servicio de Google (Paso 6) |
-| **La contraseña no es correcta.** | El texto no coincide con la propiedad `TOKEN` de Apps Script | Revisa que se llame exactamente `TOKEN`, que tenga 16 caracteres o más y que no tenga espacios; vuelve a escribirla a mano y guarda |
-| **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección de `config.js` es incorrecta | Revisa tu conexión y que la dirección termine en `/exec` |
-| **Tu servicio de Google respondió algo que no es de la app…** | Dirección de una implementación vieja, o acceso mal configurado | En Apps Script: Implementar → Administrar implementaciones; confirma que la dirección es la activa y que **Quién tiene acceso** es **Cualquier usuario** |
-| **Los registros están en la hoja pero no salen en la app** | Sheets guardó la fecha como fecha real y una versión anterior del servicio no la reconocía | Pega la última versión de `apps-script/Code.gs` en Apps Script y publica una **Nueva versión** (Implementar → Administrar implementaciones → lápiz → Nueva versión). Los registros que ya tienes empiezan a verse solos |
-| **Falta la pestaña … Ejecuta setup()** | No se crearon las pestañas de la hoja | En Apps Script, ejecuta la función `setup` (Paso 3) |
+| Aviso amarillo **Actualiza tu servicio de Google** | Tu Apps Script tiene una versión anterior | Toca **Ver cómo**: el botón copia el código y te da los pasos |
+| **Falta la dirección del servicio** | Ni `config.js` ni el teléfono tienen la dirección | Toca **Poner la dirección** y pega la que termina en `/exec` |
+| **La contraseña no es correcta.** | El texto no coincide con la propiedad `TOKEN` | Revisa que se llame exactamente `TOKEN` y tenga 16 caracteres o más. Los espacios al inicio o al final ya no importan |
+| **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección es incorrecta | Revisa tu conexión y la dirección en Ajustes |
+| **Tu servicio de Google respondió algo que no es de la app…** | La dirección es de una implementación vieja o el acceso está mal | En Apps Script: Implementar → Administrar implementaciones. Copia la URL de la implementación activa a la app (Ajustes → Cambiar la dirección) y confirma **Quién tiene acceso: Cualquier usuario** |
+| **Falta la pestaña … ejecuta la función setup** | No se crearon las pestañas | En Apps Script, ejecuta `setup` (Paso 3). Es seguro repetirlo |
 
-Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas ayuda, copia ese detalle completo. Otra pista útil: en Apps Script, el menú izquierdo **Ejecuciones** muestra cada llamada de la app y, si falló, el error.
+Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas ayuda, copia ese detalle completo.
 
 ## Cómo se usa
 
-- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas y ejercicio del día. Con las flechas y la tira de días puedes ver otros días.
+- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas, ejercicio y series de gym del día. Con las flechas y la tira de días ves otros días al instante, porque la app trae los últimos 60 días de una vez. Al volver a la app después de un rato, se actualiza sola.
 - **Botón +:** abre **Pegar** (registrar con ayuda de tu chat de Claude), los formularios de comida, medidas (peso, cintura, sueño) y ejercicio, y el **Chat** si activaste el Paso 4c. En Claude puedes escribir cosas como «desayuno 3 huevos y 2 tostadas», «peso 72,4, cintura 85, dormí 7 horas», «caminata 40 minutos» o «press banca 4 series de 8 con 60 kg».
-- **Tocar una comida o un ejercicio:** ver el detalle o borrarlo.
+- **Tocar una comida, un ejercicio o un ejercicio de gym:** ver el detalle o borrarlo (en gym, serie por serie).
+- **Pegar:** si Claude no pone fecha, se guarda en el día que tienes abierto. Acepta fechas como `9/10/2026` y avisa si una fecha es futura. Al guardar, la app te lleva al día de lo guardado.
 - **Medidas:** un registro por día. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes.
 - **Meta de calorías del día** = calorías base + ejercicio del día − déficit promedio. Las cifras se cambian en la pestaña `metas` de tu hoja.
 
@@ -129,6 +134,8 @@ Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas a
 | `index.html`, `styles.css`, `app.js` | La app |
 | `config.js` | La dirección de tu servicio de Google |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Lo que permite instalarla en el celular |
+| `tests/` | Pruebas automáticas: el servicio con una hoja simulada y la app completa en un navegador |
+| `.github/workflows/pruebas.yml` | Corre las pruebas en cada cambio; si algo se rompe, el PR muestra una ✗ antes de fusionarlo |
 
 ## Seguridad en resumen
 

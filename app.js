@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  var VERSION_APP = 2;
+  var SERVICIO_REQUERIDO = 2; // versión de apps-script/Code.gs que espera esta app
+  var DIAS_CARGADOS = 60;     // la app trae de una vez los últimos 60 días: cambiar de día es instantáneo
+
   var CFG = window.CONFIG || {};
   var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
   var DIAS_LARGO = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -15,6 +19,7 @@
     peso: '<path d="M4 7h16M6 7l-2 12h16L18 7M9 7a3 3 0 0 1 6 0"/>',
     luna: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
     pesa: '<path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/>',
+    camina: '<circle cx="13" cy="4" r="2"/><path d="M8 21l3-7-3-3 3-4 4 3 3 1M11 14l5 2 1 5"/>',
     ajustes: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
     atras: '<path d="M15 5l-7 7 7 7"/>',
     sig: '<path d="M9 5l7 7-7 7"/>',
@@ -60,17 +65,44 @@
     return el;
   }
   function fmt(n, dec) {
-    if (n === null || n === undefined || isNaN(n)) return "—";
+    if (n === null || n === undefined || n === "" || isNaN(n)) return "—";
     return Number(n).toLocaleString("de-DE", { maximumFractionDigits: dec === undefined ? 0 : dec });
   }
-  function iso(d) {
-    var m = d.getMonth() + 1, dd = d.getDate();
-    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (dd < 10 ? "0" : "") + dd;
-  }
+  function dos(n) { n = String(n); return n.length < 2 ? "0" + n : n; }
+  function iso(d) { return d.getFullYear() + "-" + dos(d.getMonth() + 1) + "-" + dos(d.getDate()); }
   function deISO(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function sumarDias(fecha, n) { var d = deISO(fecha); d.setDate(d.getDate() + n); return iso(d); }
   function sumar(lista, campo) { return lista.reduce(function (a, x) { return a + (Number(x[campo]) || 0); }, 0); }
   function corta(s) { var d = deISO(s); return d.getDate() + " " + MESES[d.getMonth()]; }
-  function ahoraHHMM() { var d = new Date(); return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  function ahoraHHMM() { var d = new Date(); return dos(d.getHours()) + ":" + dos(d.getMinutes()); }
+  function cap(s) { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function vacio(v) { return v === null || v === undefined || v === ""; }
+  function plural(n, uno, varios) { return n + " " + (n === 1 ? uno : varios); }
+
+  /** Cualquier forma de fecha que pueda venir de la hoja o de Claude → «AAAA-MM-DD». */
+  function normFecha(v) {
+    if (vacio(v)) return "";
+    if (typeof v === "number") {
+      if (v > 20000 && v < 80000) { // número de serie de Sheets
+        var d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5);
+        return d.getUTCFullYear() + "-" + dos(d.getUTCMonth() + 1) + "-" + dos(d.getUTCDate());
+      }
+      return String(v);
+    }
+    var s = String(v).trim(), m;
+    if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return m[1] + "-" + dos(m[2]) + "-" + dos(m[3]);
+    if ((m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))) return m[3] + "-" + dos(m[2]) + "-" + dos(m[1]);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) { var f = new Date(s); if (!isNaN(f.getTime())) return iso(f); }
+    return s;
+  }
+  function normHora(v) {
+    if (vacio(v)) return "";
+    if (typeof v === "number" && v >= 0 && v < 1) { var min = Math.round(v * 1440); return dos(Math.floor(min / 60) % 24) + ":" + dos(min % 60); }
+    var s = String(v).trim(), m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return dos(m[1]) + ":" + m[2];
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) { var f = new Date(s); if (!isNaN(f.getTime())) return dos(f.getHours()) + ":" + dos(f.getMinutes()); }
+    return s;
+  }
 
   var toastT;
   function aviso(txt, error) {
@@ -85,20 +117,28 @@
     }, error ? 9000 : 3200);
   }
 
-  // ---------- Contraseña y conexión con Google ----------
-  function leerToken() { try { return localStorage.getItem("token") || ""; } catch (e) { return ""; } }
-  function guardarToken(t) { try { localStorage.setItem("token", t); } catch (e) { /* sin almacenamiento */ } }
-  function borrarToken() { try { localStorage.removeItem("token"); } catch (e) { /* nada */ } }
+  // ---------- Lo que se guarda en este dispositivo ----------
+  function leerLocal(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }
+  function guardarLocal(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento */ } }
+  function borrarLocal(k) { try { localStorage.removeItem(k); } catch (e) { /* nada */ } }
   var tokenMemoria = "";
+  var URL_VALIDA = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+  function urlServicio() { var u = leerLocal("servicio"); return URL_VALIDA.test(u) ? u : (CFG.SCRIPT_URL || ""); }
+  function urlConfigurada() { var u = urlServicio(); return !!u && u.indexOf("TU-ID") < 0; }
 
+  // ---------- Conexión con el servicio de Google ----------
   function api(accion, extra, tokenProbar) {
-    var cuerpo = Object.assign({ token: tokenProbar || tokenMemoria || leerToken(), accion: accion }, extra || {});
-    return fetch(CFG.SCRIPT_URL, {
+    var cuerpo = Object.assign({ token: tokenProbar || tokenMemoria || leerLocal("token"), accion: accion }, extra || {});
+    var control = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var reloj = control ? setTimeout(function () { control.abort(); }, 45000) : null;
+    return fetch(urlServicio(), {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita la petición previa que Google no admite
-      body: JSON.stringify(cuerpo)
+      body: JSON.stringify(cuerpo),
+      signal: control ? control.signal : undefined
     }).catch(function (x) {
-      var e = new Error("No se pudo conectar con tu servicio de Google. Revisa tu internet y la dirección de config.js.");
+      var tardo = x && x.name === "AbortError";
+      var e = new Error(tardo ? "Tu servicio de Google tardó demasiado en responder. Inténtalo de nuevo." : "No se pudo conectar con tu servicio de Google. Revisa tu internet y la dirección del servicio (Ajustes).");
       e.red = true;
       e.detalle = String((x && x.message) || x);
       throw e;
@@ -112,19 +152,20 @@
         }
       });
     }).then(function (j) {
+      if (reloj) clearTimeout(reloj);
       if (!j.ok) {
         var e = new Error(j.error || "Error");
         e.noAutorizado = j.error === "No autorizado";
         throw e;
       }
       return j;
-    });
+    }, function (e) { if (reloj) clearTimeout(reloj); throw e; });
   }
   function textoError(e) {
     return ((e && e.message) || "Error") + (e && e.detalle ? " (Detalle: " + e.detalle + ")" : "");
   }
   function manejarError(e) {
-    if (e && e.noAutorizado) { borrarToken(); tokenMemoria = ""; pantallaEntrada("La contraseña no es correcta."); return; }
+    if (e && e.noAutorizado) { borrarLocal("token"); tokenMemoria = ""; pantallaEntrada("La contraseña no es correcta."); return; }
     var msg = textoError(e);
     var enEntrada = document.querySelector(".entrada .error");
     if (enEntrada) enEntrada.textContent = msg;
@@ -133,7 +174,17 @@
 
   // ---------- Estado ----------
   var hoy = iso(new Date());
-  var estado = { fecha: hoy, datos: null, historial: [] };
+  var estado = {
+    fecha: hoy,
+    version: null,   // versión del servicio de Google (1 = anterior a esta app)
+    chat: false,
+    metas: {},
+    tablas: null,    // datos de los últimos días (servicio versión 2 o más)
+    desde: null,
+    legado: null,    // resumen de un solo día (servicio versión 1)
+    cargadoEn: null,
+    historial: []
+  };
   var raiz = document.getElementById("app");
 
   function pantallaEntrada(mensaje) {
@@ -144,25 +195,103 @@
       var t = campo.value.trim();
       if (!t) return;
       err.textContent = "Comprobando…";
-      api("ping", {}, t).then(function () { guardarToken(t); tokenMemoria = t; err.textContent = "Contraseña correcta. Cargando tus datos…"; cargar(); })
-        .catch(function (e) { err.textContent = e.noAutorizado ? "La contraseña no es correcta." : textoError(e); });
+      api("ping", {}, t).then(function (r) {
+        guardarLocal("token", t); tokenMemoria = t;
+        estado.version = Number(r.version) || 1; estado.chat = !!r.chat;
+        err.textContent = "Contraseña correcta. Cargando tus datos…";
+        cargar();
+      }).catch(function (e) { err.textContent = e.noAutorizado ? "La contraseña no es correcta." : textoError(e); });
     };
     campo.addEventListener("keydown", function (e) { if (e.key === "Enter") ir(); });
     raiz.appendChild(h("div", { class: "entrada" },
       h("h1", { text: "Mi seguimiento" }),
-      h("p", { class: "ayuda", text: "Escribe la contraseña que creaste en tu hoja de Google. Solo se pide una vez en este dispositivo." }),
+      h("p", { class: "ayuda", text: "Escribe la contraseña que creaste en tu hoja de Google (la propiedad TOKEN). Solo se pide una vez en este dispositivo." }),
       h("label", { for: "tok", text: "Contraseña" }), campo, err,
-      h("button", { class: "btn lima", text: "Entrar", onclick: ir })
+      h("button", { class: "btn lima", text: "Entrar", onclick: ir }),
+      h("button", { class: "btn sec", text: "Cambiar la dirección del servicio", onclick: function () { abrirDireccion(); } })
     ));
   }
 
+  function filaNormal(f) {
+    var o = {};
+    Object.keys(f || {}).forEach(function (k) { o[k] = f[k]; });
+    if ("fecha" in o) o.fecha = normFecha(o.fecha);
+    if ("hora" in o) o.hora = normHora(o.hora);
+    return o;
+  }
+
+  /** Trae los datos. Con el servicio nuevo, trae los últimos días de una vez. */
   function cargar() {
+    hoy = iso(new Date());
     raiz.classList.add("cargando");
-    return api("dia", { fecha: estado.fecha }).then(function (r) {
-      estado.datos = r.datos;
+    var paso = estado.version === null
+      ? api("ping").then(function (r) { estado.version = Number(r.version) || 1; estado.chat = !!r.chat; })
+      : Promise.resolve();
+    return paso.then(function () {
+      if (estado.version >= 2) {
+        var desde = sumarDias(estado.fecha < hoy ? estado.fecha : hoy, -DIAS_CARGADOS);
+        return api("leer", { desde: desde }).then(function (r) {
+          estado.tablas = {
+            comidas: (r.comidas || []).map(filaNormal),
+            ejercicio: (r.ejercicio || []).map(filaNormal),
+            series_gym: (r.series_gym || []).map(filaNormal),
+            medidas: (r.medidas || []).map(filaNormal)
+          };
+          estado.metas = r.metas || {};
+          estado.chat = !!r.chat;
+          estado.desde = desde;
+          estado.legado = null;
+        });
+      }
+      return api("dia", { fecha: estado.fecha }).then(function (r) {
+        estado.legado = r.datos;
+        estado.metas = (r.datos && r.datos.metas) || {};
+        estado.chat = !!(r.datos && r.datos.chat);
+        estado.tablas = null;
+      });
+    }).then(function () {
+      estado.cargadoEn = new Date();
       raiz.classList.remove("cargando");
       pintar();
     }).catch(function (e) { raiz.classList.remove("cargando"); manejarError(e); });
+  }
+
+  /** Cambia de día: si los datos ya están en el teléfono, es instantáneo. */
+  function irA(fecha) {
+    estado.fecha = fecha > hoy ? hoy : fecha;
+    if (estado.tablas && estado.desde && estado.fecha >= sumarDias(estado.desde, 7)) pintar();
+    else cargar();
+  }
+
+  /** Lo que se ve en un día, venga del servicio nuevo o del anterior. */
+  function vistaDia() {
+    var f = estado.fecha, porHora = function (a, b) { return String(a.hora || "") < String(b.hora || "") ? -1 : 1; };
+    if (estado.tablas) {
+      var T = estado.tablas;
+      var medidas = T.medidas.filter(function (m) { return m.fecha; }).sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
+      var hasta = medidas.filter(function (m) { return m.fecha <= f; });
+      var conPeso = hasta.filter(function (m) { return !vacio(m.peso_kg); });
+      var conCintura = hasta.filter(function (m) { return !vacio(m.cintura_cm); });
+      return {
+        comidas: T.comidas.filter(function (c) { return c.fecha === f; }).sort(porHora),
+        ejercicio: T.ejercicio.filter(function (e) { return e.fecha === f; }),
+        series: T.series_gym.filter(function (s) { return s.fecha === f; }),
+        medida: medidas.filter(function (m) { return m.fecha === f; })[0] || null,
+        ultimoPeso: conPeso.length ? conPeso[conPeso.length - 1] : null,
+        ultimaCintura: conCintura.length ? conCintura[conCintura.length - 1] : null,
+        pesos: conPeso.slice(-7)
+      };
+    }
+    var d = estado.legado || {};
+    return {
+      comidas: (d.comidas || []).map(filaNormal).sort(porHora),
+      ejercicio: (d.ejercicio || []).map(filaNormal),
+      series: (d.series_gym || []).map(filaNormal),
+      medida: d.medida || null,
+      ultimoPeso: d.ultimoPeso || null,
+      ultimaCintura: d.ultimaCintura || null,
+      pesos: d.pesos || []
+    };
   }
 
   // ---------- Pantalla "Hoy" ----------
@@ -171,18 +300,11 @@
     d.setDate(d.getDate() - dow);
     return d;
   }
-  function moverSemana(delta) {
-    var d = deISO(estado.fecha);
-    d.setDate(d.getDate() + 7 * delta);
-    var nueva = iso(d);
-    estado.fecha = nueva > hoy ? hoy : nueva;
-    cargar();
-  }
 
   function tarjetaDia(fecha) {
     var d = deISO(fecha);
     return h("button", { class: "dia" + (fecha === estado.fecha ? " on" : ""), disabled: fecha > hoy, "aria-label": DIAS_LARGO[d.getDay()] + " " + d.getDate(),
-      onclick: function () { estado.fecha = fecha; cargar(); } },
+      onclick: function () { irA(fecha); } },
       h("span", { text: DIAS_CORTO[(d.getDay() + 6) % 7] }), h("span", { text: String(d.getDate()) }));
   }
 
@@ -203,8 +325,7 @@
     var barras = "";
     vals.forEach(function (v, i) {
       var alto = rango === 0 ? 14 : 6 + ((v - mn) / rango) * 16;
-      var ultimo = i === vals.length - 1;
-      barras += '<rect x="' + (i * 19) + '" y="' + (22 - alto).toFixed(1) + '" width="14" height="' + alto.toFixed(1) + '" rx="4" fill="' + (ultimo ? "#E0A02E" : "#F2C879") + '"/>';
+      barras += '<rect x="' + (i * 19) + '" y="' + (22 - alto).toFixed(1) + '" width="14" height="' + alto.toFixed(1) + '" rx="4" fill="' + (i === vals.length - 1 ? "#E0A02E" : "#F2C879") + '"/>';
     });
     var s = svg(barras, 22, 130);
     s.setAttribute("width", "100%");
@@ -215,16 +336,28 @@
     return s;
   }
 
+  /** Series de gym agrupadas por ejercicio, en el orden en que se hicieron. */
+  function agruparSeries(series) {
+    var grupos = [], porNombre = {};
+    series.slice().sort(function (a, b) { return (Number(a.numero_serie) || 0) - (Number(b.numero_serie) || 0); }).forEach(function (s) {
+      var k = String(s.ejercicio || "Ejercicio").trim();
+      if (!porNombre[k]) { porNombre[k] = { ejercicio: k, rutina: s.rutina, series: [] }; grupos.push(porNombre[k]); }
+      porNombre[k].series.push(s);
+    });
+    return grupos;
+  }
+
   function pintar() {
-    var d = estado.datos, m = d.metas || {};
+    var d = vistaDia(), m = estado.metas || {};
     var consumido = sumar(d.comidas, "kcal"), prot = sumar(d.comidas, "proteina_g");
     var carb = sumar(d.comidas, "carbos_g"), gra = sumar(d.comidas, "grasa_g");
     var extra = sumar(d.ejercicio, "kcal");
-    var base = m.kcal_base !== undefined ? m.kcal_base : 2500;
-    var deficit = ((m.deficit_min_kcal !== undefined ? m.deficit_min_kcal : 200) + (m.deficit_max_kcal !== undefined ? m.deficit_max_kcal : 300)) / 2;
+    var num = function (v, def) { return vacio(v) || isNaN(v) ? def : Number(v); };
+    var base = num(m.kcal_base, 2500);
+    var deficit = (num(m.deficit_min_kcal, 200) + num(m.deficit_max_kcal, 300)) / 2;
     var meta = base + extra - deficit;
     var quedan = meta - consumido;
-    var protMin = m.proteina_min_g !== undefined ? m.proteina_min_g : 130;
+    var protMin = num(m.proteina_min_g, 130);
 
     var hora = new Date().getHours();
     var saludo = hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
@@ -234,33 +367,21 @@
     var diasSemana = [];
     for (var i = 0; i < 7; i++) { var x = new Date(lunes); x.setDate(lunes.getDate() + i); diasSemana.push(iso(x)); }
 
-    var peso = d.medida && d.medida.peso_kg !== null ? d.medida.peso_kg : (d.ultimoPeso ? d.ultimoPeso.peso_kg : null);
-    var pesoFecha = d.medida && d.medida.peso_kg !== null ? estado.fecha : (d.ultimoPeso ? d.ultimoPeso.fecha : null);
-    var cintura = d.medida && d.medida.cintura_cm !== null ? d.medida.cintura_cm : (d.ultimaCintura ? d.ultimaCintura.cintura_cm : null);
-    var sueno = d.medida && d.medida.horas_sueno !== null ? d.medida.horas_sueno : null;
+    var peso = d.medida && !vacio(d.medida.peso_kg) ? d.medida.peso_kg : (d.ultimoPeso ? d.ultimoPeso.peso_kg : null);
+    var pesoFecha = d.medida && !vacio(d.medida.peso_kg) ? estado.fecha : (d.ultimoPeso ? normFecha(d.ultimoPeso.fecha) : null);
+    var cintura = d.medida && !vacio(d.medida.cintura_cm) ? d.medida.cintura_cm : (d.ultimaCintura ? d.ultimaCintura.cintura_cm : null);
+    var sueno = d.medida && !vacio(d.medida.horas_sueno) ? Number(d.medida.horas_sueno) : null;
 
     var puntos = h("div", { class: "puntos", role: "img", "aria-label": sueno === null ? "Sueño sin registrar" : sueno + " horas de sueño" });
     for (var p = 0; p < 8; p++) puntos.appendChild(h("i", { class: sueno !== null && p < Math.round(Math.min(sueno, 8)) ? "on" : "" }));
 
-    var comidas = d.comidas.length
-      ? h("div", { class: "carrusel" }, d.comidas.map(function (c) {
-          return h("button", { class: "plato", "aria-label": c.tipo_comida + ": " + c.descripcion, onclick: function () { detalleComida(c); } },
-            plato(c.tipo_comida), h("b", { text: c.tipo_comida.charAt(0).toUpperCase() + c.tipo_comida.slice(1) }),
-            h("div", { class: "desc", text: c.descripcion }),
-            h("div", { class: "kcal-chip", text: c.kcal === null ? "sin kcal" : fmt(c.kcal) + " kcal" }));
-        }))
-      : h("div", { class: "vacio", text: "Aún no hay comidas en este día. Toca el + para agregar." });
-
-    var ejercicio = d.ejercicio.length
-      ? h("div", { class: "lista" }, d.ejercicio.map(function (e) {
-          return h("button", { class: "item", onclick: function () { detalleEjercicio(e); } },
-            h("div", { class: "chip-ico", style: "background:#E8F5D4;color:#2E5A12" }, icono("pesa", 20)),
-            h("div", { class: "t" }, h("b", { text: e.tipo.charAt(0).toUpperCase() + e.tipo.slice(1) + (e.duracion_min ? " · " + e.duracion_min + " min" : "") }),
-              h("span", { text: (e.kcal !== null ? fmt(e.kcal) + " kcal · " : "") + e.fuente })));
-        }))
-      : null;
-
     raiz.textContent = "";
+    if (estado.version !== null && estado.version < SERVICIO_REQUERIDO) {
+      raiz.appendChild(h("div", { class: "banda" },
+        h("b", { text: "Actualiza tu servicio de Google" }),
+        h("span", { text: "Tiene una versión anterior y por eso algunos registros pueden no verse. Toma 2 minutos." }),
+        h("button", { class: "btn lima", text: "Ver cómo", onclick: abrirAjustes })));
+    }
     raiz.appendChild(h("div", { class: "top" },
       h("div", { class: "quien" },
         h("div", { class: "avatar", style: "color:#2E5A12" }, icono("user", 24)),
@@ -269,17 +390,17 @@
       h("button", { class: "icono-btn", "aria-label": "Metas y ajustes", onclick: abrirAjustes }, icono("meta"))
     ));
     raiz.appendChild(h("div", { style: "display:flex;align-items:center;justify-content:space-between" },
-      h("button", { class: "icono-btn", "aria-label": "Semana anterior", onclick: function () { moverSemana(-1); } }, icono("atras", 20)),
+      h("button", { class: "icono-btn", "aria-label": "Semana anterior", onclick: function () { irA(sumarDias(estado.fecha, -7)); } }, icono("atras", 20)),
       h("div", { class: "sub", text: corta(diasSemana[0]) + " – " + corta(diasSemana[6]) }),
-      h("button", { class: "icono-btn", "aria-label": "Semana siguiente", disabled: diasSemana[6] >= hoy, onclick: function () { moverSemana(1); } }, icono("sig", 20))
+      h("button", { class: "icono-btn", "aria-label": "Semana siguiente", disabled: diasSemana[6] >= hoy, onclick: function () { irA(sumarDias(estado.fecha, 7)); } }, icono("sig", 20))
     ));
     raiz.appendChild(h("div", { class: "dias" }, diasSemana.map(tarjetaDia)));
 
     raiz.appendChild(h("div", { class: "hero" },
-      anillo(consumido / meta, fmt(Math.abs(quedan)), quedan >= 0 ? "kcal restantes" : "kcal de más"),
+      anillo(meta > 0 ? consumido / meta : 0, fmt(Math.abs(quedan)), quedan >= 0 ? "kcal restantes" : "kcal de más"),
       h("div", { class: "macros" },
         h("div", {}, h("div", { class: "fila" }, h("span", { text: "Proteína" }), h("span", { text: fmt(prot) + " / " + fmt(protMin) + " g" })),
-          h("div", { class: "barra" }, h("div", { style: "width:" + Math.min(100, Math.round(prot / protMin * 100)) + "%" }))),
+          h("div", { class: "barra" }, h("div", { style: "width:" + Math.min(100, Math.round(protMin > 0 ? prot / protMin * 100 : 0)) + "%" }))),
         h("div", { class: "fila" }, h("span", { text: "Carbos" }), h("span", { text: fmt(carb) + " g" })),
         h("div", { class: "fila" }, h("span", { text: "Grasa" }), h("span", { text: fmt(gra) + " g" })),
         h("div", { class: "meta", text: "Meta del día: " + fmt(meta) + " kcal" + (extra ? " (incluye ejercicio)" : "") })
@@ -300,15 +421,39 @@
     ));
 
     raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Comidas del día" }), h("span", { text: d.comidas.length ? d.comidas.length + (d.comidas.length === 1 ? " registro" : " registros") : "" })));
-    raiz.appendChild(comidas);
-    if (ejercicio) {
+    raiz.appendChild(d.comidas.length
+      ? h("div", { class: "carrusel" }, d.comidas.map(function (c) {
+          return h("button", { class: "plato", "aria-label": c.tipo_comida + ": " + c.descripcion, onclick: function () { detalleComida(c); } },
+            plato(c.tipo_comida), h("b", { text: cap(c.tipo_comida) }),
+            h("div", { class: "desc", text: c.descripcion }),
+            h("div", { class: "kcal-chip", text: vacio(c.kcal) ? "sin kcal" : fmt(c.kcal) + " kcal" }));
+        }))
+      : h("div", { class: "vacio", text: "Aún no hay comidas en este día. Toca el + para agregar." }));
+
+    if (d.ejercicio.length) {
       raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Ejercicio" })));
-      raiz.appendChild(ejercicio);
+      raiz.appendChild(h("div", { class: "lista" }, d.ejercicio.map(function (e) {
+        return h("button", { class: "item", onclick: function () { detalleEjercicio(e); } },
+          h("div", { class: "chip-ico", style: "background:#E8F5D4;color:#2E5A12" }, icono(e.tipo === "gym" ? "pesa" : "camina", 20)),
+          h("div", { class: "t" }, h("b", { text: cap(e.tipo) + (e.duracion_min ? " · " + fmt(e.duracion_min) + " min" : "") }),
+            h("span", { text: (vacio(e.kcal) ? "" : fmt(e.kcal) + " kcal · ") + (e.fuente || "manual") })));
+      })));
+    }
+
+    var grupos = agruparSeries(d.series);
+    if (grupos.length) {
+      raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Gym" }), h("span", { text: d.series.length + (d.series.length === 1 ? " serie" : " series") })));
+      raiz.appendChild(h("div", { class: "lista" }, grupos.map(function (g) {
+        return h("button", { class: "item", onclick: function () { detalleGym(g); } },
+          h("div", { class: "chip-ico", style: "background:#FFF1D6;color:#9A5B00" }, icono("pesa", 20)),
+          h("div", { class: "t" }, h("b", { text: g.ejercicio + " · " + g.series.length + (g.series.length === 1 ? " serie" : " series") }),
+            h("span", { text: g.series.map(function (s) { return fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones); }).join(" · ") })));
+      })));
     }
 
     raiz.appendChild(h("nav", { class: "nav", "aria-label": "Principal" },
-      h("button", { class: "tab on", "aria-label": "Hoy", onclick: function () { estado.fecha = hoy; cargar(); } }, icono("home"), "Hoy"),
-      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.datos && estado.datos.chat ? "chat" : "pegar"); } }, icono("plus", 28)),
+      h("button", { class: "tab on", "aria-label": "Hoy", onclick: function () { irA(iso(new Date())); } }, icono("home"), "Hoy"),
+      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.chat ? "chat" : "pegar"); } }, icono("plus", 28)),
       h("button", { class: "tab", "aria-label": "Ajustes", onclick: abrirAjustes }, icono("ajustes"), "Ajustes")
     ));
   }
@@ -355,7 +500,7 @@
       var f = form.elements.fecha.value;
       cerrarHoja();
       aviso(mensaje);
-      estado.fecha = f && f <= hoy ? f : estado.fecha;
+      if (f && f <= hoy) estado.fecha = f;
       cargar();
     }).catch(function (e) { boton.disabled = false; manejarError(e); });
   }
@@ -368,7 +513,7 @@
       h("div", { class: "grid2" },
         campo("Fecha", "fecha", { attrs: { type: "date", required: true, max: hoy }, valor: estado.fecha }),
         campo("Hora", "hora", { attrs: { type: "time" }, valor: ahoraHHMM() })),
-      campo("Tipo de comida", "tipo_comida", { tag: "select", hijos: null, attrs: { required: true } }),
+      campo("Tipo de comida", "tipo_comida", { tag: "select", attrs: { required: true } }),
       campo("Descripción", "descripcion", { tag: "textarea", attrs: { rows: 2, required: true, placeholder: "Ej: 200 g de pollo con arroz y ensalada" } }),
       h("div", { class: "grid2" },
         campo("Calorías (kcal)", "kcal", { attrs: { type: "number", min: 0, step: 1, inputmode: "numeric" } }),
@@ -429,7 +574,7 @@
     return f;
   }
 
-
+  // ---------- Chat con API (opcional) ----------
   function formChat() {
     var log = h("div", { class: "chat-log", "aria-live": "polite" });
     var texto = h("textarea", { rows: 2, maxlength: "1000", placeholder: "Ej: almuerzo, 200 g de pollo con arroz y ensalada", "aria-label": "Mensaje" });
@@ -465,7 +610,7 @@
       btn.disabled = true; btn.textContent = "Pensando…";
       var espera = h("div", { class: "burbuja ia", text: "…" });
       log.appendChild(espera); log.scrollTop = log.scrollHeight;
-      api("chat", { texto: t, historial: previo, hoy: hoy, hora: ahoraHHMM() }).then(function (r) {
+      api("chat", { texto: t, historial: previo, hoy: iso(new Date()), hora: ahoraHHMM() }).then(function (r) {
         espera.remove();
         var resp = { rol: "assistant", texto: r.respuesta, guardados: r.guardados || [] };
         estado.historial.push(resp); burbuja(resp);
@@ -473,7 +618,7 @@
       }).catch(function (e) {
         espera.remove();
         if (e && e.noAutorizado) return manejarError(e);
-        var msg = { rol: "assistant", texto: e && e.message && !/fetch|network|Failed/i.test(e.message) ? e.message : "No hay conexión con tu hoja de Google.", error: true };
+        var msg = { rol: "assistant", texto: textoError(e), error: true };
         estado.historial.push(msg); burbuja(msg);
       }).then(function () { btn.disabled = false; btn.textContent = "Enviar"; });
     });
@@ -485,34 +630,36 @@
   // ---------- Pegar desde Claude (sin costo de API) ----------
   // Las metas salen de la pestaña «metas» de tu hoja; el perfil lo escribes tú en el chat de Claude.
   function instruccionesClaude() {
-    var m = (estado.datos && estado.datos.metas) || {};
+    var m = estado.metas || {};
     var partes = [];
-    if (m.proteina_min_g != null && m.proteina_max_g != null) partes.push("proteína de " + fmt(m.proteina_min_g) + " a " + fmt(m.proteina_max_g) + " g al día");
-    if (m.kcal_base != null) partes.push("calorías cerca del mantenimiento (unas " + fmt(m.kcal_base) + " kcal más el ejercicio del día)" + (m.deficit_min_kcal != null && m.deficit_max_kcal != null ? ", con un déficit de " + fmt(m.deficit_min_kcal) + " a " + fmt(m.deficit_max_kcal) + " kcal en días normales" : ""));
+    if (!vacio(m.proteina_min_g) && !vacio(m.proteina_max_g)) partes.push("proteína de " + fmt(m.proteina_min_g) + " a " + fmt(m.proteina_max_g) + " g al día");
+    if (!vacio(m.kcal_base)) partes.push("calorías cerca del mantenimiento (unas " + fmt(m.kcal_base) + " kcal más el ejercicio del día)" + (!vacio(m.deficit_min_kcal) && !vacio(m.deficit_max_kcal) ? ", con un déficit de " + fmt(m.deficit_min_kcal) + " a " + fmt(m.deficit_max_kcal) + " kcal en días normales" : ""));
     return [
-    "Eres mi asistente de seguimiento personal.",
-    "Mi perfil: [escribe aquí tu edad, estatura, peso y objetivo].",
-    partes.length ? "Mis metas: " + partes.join("; ") + "." : "",
-    "",
-    "Cuando te cuente lo que comí, mi peso, cintura, sueño o ejercicio, haz esto:",
-    "1. Estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que te dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.",
-    "2. Si algo es ambiguo o las cantidades parecen raras, hazme UNA pregunta corta antes de dar los datos.",
-    "3. Respóndeme en español, breve, con el total acumulado del día contra mis metas (llevas X kcal y Y g de proteína; te faltan Z).",
-    "4. Termina SIEMPRE con UN solo bloque de código con una lista JSON de lo nuevo (solo lo de este mensaje), sin texto dentro del bloque.",
-    "",
-    "Formato de cada registro (usa solo los campos que corresponden; fecha AAAA-MM-DD, hoy si no te digo otra; hora HH:MM opcional):",
-    '{"tabla":"comidas","fecha":"2026-10-08","hora":"13:30","tipo_comida":"almuerzo","descripcion":"Pollo, arroz y ensalada","kcal":620,"proteina_g":46,"carbos_g":60,"grasa_g":12,"estimado":true}',
-    '{"tabla":"medidas","fecha":"2026-10-08","peso_kg":72.4,"cintura_cm":85.5,"horas_sueno":7}',
-    '{"tabla":"ejercicio","fecha":"2026-10-08","tipo":"caminata","duracion_min":40,"kcal":210,"fuente":"estimado","notas":""}',
-    '{"tabla":"series_gym","fecha":"2026-10-08","rutina":"Pecho","ejercicio":"Press banca","numero_serie":1,"peso_kg":60,"repeticiones":8}',
-    "",
-    "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
-    "En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
-    "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
+      "Eres mi asistente de seguimiento personal.",
+      "Mi perfil: [escribe aquí tu edad, estatura, peso y objetivo].",
+      partes.length ? "Mis metas: " + partes.join("; ") + "." : "",
+      "",
+      "Cuando te cuente lo que comí, mi peso, cintura, sueño o ejercicio, haz esto:",
+      "1. Estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que te dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.",
+      "2. Si algo es ambiguo o las cantidades parecen raras, hazme UNA pregunta corta antes de dar los datos.",
+      "3. Respóndeme en español, breve, con el total acumulado del día contra mis metas (llevas X kcal y Y g de proteína; te faltan Z).",
+      "4. Termina SIEMPRE con UN solo bloque de código con una lista JSON de lo nuevo (solo lo de este mensaje), sin texto dentro del bloque.",
+      "5. NO pongas el campo «fecha»: mi app usa el día que tengo abierto. Solo si te hablo de otro día (ayer, el lunes…) agrega \"fecha\":\"AAAA-MM-DD\".",
+      "",
+      "Formato de cada registro (usa solo los campos que corresponden; hora HH:MM opcional):",
+      '{"tabla":"comidas","hora":"13:30","tipo_comida":"almuerzo","descripcion":"Pollo, arroz y ensalada","kcal":620,"proteina_g":46,"carbos_g":60,"grasa_g":12,"estimado":true}',
+      '{"tabla":"medidas","peso_kg":72.4,"cintura_cm":85.5,"horas_sueno":7}',
+      '{"tabla":"ejercicio","tipo":"caminata","duracion_min":40,"kcal":210,"fuente":"estimado","notas":""}',
+      '{"tabla":"series_gym","rutina":"Pecho","ejercicio":"Press banca","numero_serie":1,"peso_kg":60,"repeticiones":8}',
+      "",
+      "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
+      "En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
+      "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
     ].join("\n");
   }
 
-  var TABLAS_VALIDAS = { comidas: 1, medidas: 1, ejercicio: 1, series_gym: 1 };
+  var ALIAS_TABLAS = { comidas: "comidas", comida: "comidas", medidas: "medidas", medida: "medidas", ejercicio: "ejercicio", ejercicios: "ejercicio",
+    series_gym: "series_gym", serie_gym: "series_gym", series: "series_gym", serie: "series_gym", gym: "series_gym" };
 
   function leerRegistros(texto) {
     var t = String(texto || "").replace(/```[a-zA-Z]*/g, "").trim();
@@ -531,25 +678,43 @@
     return datos;
   }
 
+  /** Limpia un registro pegado: nombre de tabla, fecha (o el día abierto), mayúsculas. */
+  function normalizarRegistro(r) {
+    if (!r || typeof r !== "object") return null;
+    var o = {};
+    Object.keys(r).forEach(function (k) { o[String(k).trim()] = typeof r[k] === "string" ? r[k].trim() : r[k]; });
+    o.tabla = ALIAS_TABLAS[String(o.tabla || "").toLowerCase()] || "";
+    o.fecha = vacio(o.fecha) ? estado.fecha : normFecha(o.fecha);
+    if (!vacio(o.hora)) o.hora = normHora(o.hora);
+    if (o.tipo_comida) o.tipo_comida = String(o.tipo_comida).toLowerCase();
+    if (o.tipo) o.tipo = String(o.tipo).toLowerCase();
+    if (o.fuente) o.fuente = String(o.fuente).toLowerCase();
+    return o;
+  }
+
   function describirRegistro(r) {
-    if (!r || typeof r !== "object" || !TABLAS_VALIDAS[r.tabla]) return { ok: false, texto: "Registro no reconocido" };
-    var n = function (v) { return v === null || v === undefined || v === "" ? "?" : fmt(v, 1); };
-    if (r.tabla === "comidas") return { ok: !!(r.tipo_comida && r.descripcion), texto: String(r.tipo_comida || "?") + ": " + String(r.descripcion || "?") + " · " + n(r.kcal) + " kcal · " + n(r.proteina_g) + " g proteína" + (r.estimado ? " (estimado)" : "") };
-    if (r.tabla === "medidas") {
+    if (!r || !r.tabla) return { ok: false, texto: "Registro no reconocido" };
+    var n = function (v) { return vacio(v) ? "?" : fmt(v, 1); };
+    var problema = !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? "fecha no válida" : r.fecha > hoy ? "fecha futura" : "";
+    var cuando = r.fecha !== estado.fecha && !problema ? " · " + corta(r.fecha) : "";
+    var d;
+    if (r.tabla === "comidas") d = { ok: !!(r.tipo_comida && r.descripcion), texto: cap(r.tipo_comida || "?") + ": " + String(r.descripcion || "?") + " · " + n(r.kcal) + " kcal · " + n(r.proteina_g) + " g proteína" + (r.estimado === true || r.estimado === "true" ? " (estimado)" : "") };
+    else if (r.tabla === "medidas") {
       var p = [];
-      if (r.peso_kg != null && r.peso_kg !== "") p.push(n(r.peso_kg) + " kg");
-      if (r.cintura_cm != null && r.cintura_cm !== "") p.push("cintura " + n(r.cintura_cm) + " cm");
-      if (r.horas_sueno != null && r.horas_sueno !== "") p.push(n(r.horas_sueno) + " h de sueño");
-      return { ok: p.length > 0, texto: "Medidas: " + (p.join(" · ") || "sin datos") };
-    }
-    if (r.tabla === "ejercicio") return { ok: !!r.tipo, texto: "Ejercicio: " + String(r.tipo || "?") + (r.duracion_min ? " · " + n(r.duracion_min) + " min" : "") + (r.kcal != null && r.kcal !== "" ? " · " + n(r.kcal) + " kcal" : "") };
-    return { ok: !!(r.ejercicio && r.numero_serie), texto: "Serie: " + String(r.ejercicio || "?") + " · serie " + n(r.numero_serie) + ": " + n(r.peso_kg) + " kg × " + n(r.repeticiones) };
+      if (!vacio(r.peso_kg)) p.push(n(r.peso_kg) + " kg");
+      if (!vacio(r.cintura_cm)) p.push("cintura " + n(r.cintura_cm) + " cm");
+      if (!vacio(r.horas_sueno)) p.push(n(r.horas_sueno) + " h de sueño");
+      d = { ok: p.length > 0, texto: "Medidas: " + (p.join(" · ") || "sin datos") };
+    } else if (r.tabla === "ejercicio") d = { ok: !!r.tipo, texto: "Ejercicio: " + cap(r.tipo || "?") + (r.duracion_min ? " · " + n(r.duracion_min) + " min" : "") + (vacio(r.kcal) ? "" : " · " + n(r.kcal) + " kcal") };
+    else d = { ok: !!(r.ejercicio && r.numero_serie), texto: "Gym: " + String(r.ejercicio || "?") + " · serie " + n(r.numero_serie) + ": " + n(r.peso_kg) + " kg × " + n(r.repeticiones) };
+    if (problema) { d.ok = false; d.texto += " (" + problema + ")"; }
+    d.texto += cuando;
+    return d;
   }
 
   function enviarRegistro(r) {
     var fila = {};
     Object.keys(r).forEach(function (k) { if (k !== "tabla") fila[k] = r[k]; });
-    if (!fila.fecha) fila.fecha = estado.fecha;
     return r.tabla === "medidas" ? api("medidas", { fila: fila }) : api("agregar", { tabla: r.tabla, fila: fila });
   }
 
@@ -563,16 +728,14 @@
     var validos = [];
 
     copiar.addEventListener("click", function () {
-      var listo = function () { respaldo.hidden = true; aviso("Instrucciones copiadas. Pégalas en un chat de Claude."); };
-      var plan_b = function () { respaldo.value = instruccionesClaude(); respaldo.hidden = false; respaldo.focus(); respaldo.select(); aviso("Copia el texto de abajo y pégalo en Claude."); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(instruccionesClaude()).then(listo, plan_b); else plan_b();
+      copiarTexto(instruccionesClaude(), respaldo, "Instrucciones copiadas. Pégalas en un chat de Claude.");
     });
 
     revisar.addEventListener("click", function () {
       vista.textContent = ""; guardar.hidden = true; validos = [];
       var lista;
       try { lista = leerRegistros(area.value); } catch (e) { return aviso(e.message, true); }
-      lista.forEach(function (r) {
+      lista.map(normalizarRegistro).forEach(function (r) {
         var d = describirRegistro(r);
         if (d.ok) validos.push(r);
         vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: (d.ok ? "" : "No se guardará: ") + d.texto }))));
@@ -583,17 +746,22 @@
 
     guardar.addEventListener("click", function () {
       guardar.disabled = true; revisar.disabled = true;
-      var res = { ok: 0, fallos: [] };
+      var res = { ok: 0, fallos: [], fechas: [] };
       validos.reduce(function (cadena, r) {
         return cadena.then(function () {
-          return enviarRegistro(r).then(function () { res.ok++; }, function (e) {
+          return enviarRegistro(r).then(function () { res.ok++; res.fechas.push(r.fecha); }, function (e) {
             if (e && e.noAutorizado) throw e;
             res.fallos.push(describirRegistro(r).texto + " → " + (e && e.message ? e.message : "error"));
           });
         });
       }, Promise.resolve()).then(function () {
         guardar.disabled = false; revisar.disabled = false;
-        if (res.ok) cargar();
+        if (res.ok) {
+          // Muestra el día de lo que se guardó
+          var ultima = res.fechas.filter(function (f) { return f <= hoy; }).sort().pop();
+          if (ultima) estado.fecha = ultima;
+          cargar();
+        }
         if (!res.fallos.length) { cerrarHoja(); aviso(res.ok + (res.ok === 1 ? " registro guardado" : " registros guardados")); return; }
         aviso("Guardé " + res.ok + " y fallaron " + res.fallos.length + ".", true);
         vista.textContent = "";
@@ -603,15 +771,22 @@
     });
 
     return h("div", { class: "chat" },
-      h("p", { class: "ayuda", text: "1) Copia las instrucciones y pégalas una vez en un chat de Claude. 2) Cuéntale lo que comiste, tu peso, etc. 3) Copia el bloque de datos que te devuelva y pégalo aquí." }),
+      h("p", { class: "ayuda", text: "1) Copia las instrucciones y pégalas una vez en un chat de Claude. 2) Cuéntale lo que comiste, tu peso, etc. 3) Copia el bloque de datos que te devuelva y pégalo aquí. Se guarda en el día que tienes abierto: " + corta(estado.fecha) + "." }),
       copiar, respaldo, area, revisar, vista, guardar,
       h("p", { class: "ayuda", text: "Usa tu plan de Claude, no la API. Revisa la lista antes de guardar." }));
+  }
+
+  /** Copia un texto; si el navegador no deja, lo muestra para copiarlo a mano. */
+  function copiarTexto(texto, respaldo, mensaje) {
+    var plan_b = function () { respaldo.value = texto; respaldo.hidden = false; respaldo.focus(); respaldo.select(); aviso("Copia el texto de abajo (Ctrl+C o mantén pulsado)."); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(function () { respaldo.hidden = true; aviso(mensaje); }, plan_b);
+    else plan_b();
   }
 
   function abrirAgregar(tab) {
     var cuerpo = h("div", {});
     var tabs = h("div", { class: "tabs", role: "tablist" });
-    var defs = (estado.datos && estado.datos.chat ? [["chat", "Chat", formChat]] : []).concat([["pegar", "Pegar", formPegar], ["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
+    var defs = (estado.chat ? [["chat", "Chat", formChat]] : []).concat([["pegar", "Pegar", formPegar], ["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
     function mostrar(clave) {
       cuerpo.textContent = "";
       Array.prototype.forEach.call(tabs.children, function (b, i) { b.className = defs[i][0] === clave ? "on" : ""; b.setAttribute("aria-selected", defs[i][0] === clave); });
@@ -619,59 +794,148 @@
     }
     defs.forEach(function (x) { tabs.appendChild(h("button", { type: "button", role: "tab", text: x[1], onclick: function () { mostrar(x[0]); } })); });
     abrirHoja("Agregar registro", h("div", { style: "display:flex;flex-direction:column;gap:6px" }, tabs, cuerpo));
-    mostrar(tab);
+    mostrar(defs.some(function (x) { return x[0] === tab; }) ? tab : "pegar");
   }
 
+  // ---------- Detalles ----------
   function lineas(pares) {
-    return h("div", { class: "lista" }, pares.filter(function (p) { return p[1] !== null && p[1] !== ""; }).map(function (p) {
+    return h("div", { class: "lista" }, pares.filter(function (p) { return !vacio(p[1]); }).map(function (p) {
       return h("div", { class: "item", style: "justify-content:space-between" }, h("span", { class: "sub", text: p[0] }), h("b", { text: String(p[1]) }));
     }));
   }
-  function detalleBase(titulo, pares, tabla, id) {
-    var borrar = h("button", { class: "btn peligro", text: "Borrar este registro", onclick: function () {
+  function botonBorrar(tabla, id, texto) {
+    var b = h("button", { class: "btn peligro", text: texto || "Borrar este registro", onclick: function () {
       if (!confirm("¿Borrar este registro?")) return;
-      borrar.disabled = true;
+      b.disabled = true;
       api("borrar", { tabla: tabla, id: id }).then(function () { cerrarHoja(); aviso("Registro borrado"); cargar(); })
-        .catch(function (e) { borrar.disabled = false; manejarError(e); });
+        .catch(function (e) { b.disabled = false; manejarError(e); });
     } });
-    abrirHoja(titulo, h("div", { style: "display:flex;flex-direction:column;gap:6px" }, lineas(pares), borrar));
+    return b;
   }
   function detalleComida(c) {
-    detalleBase(c.tipo_comida.charAt(0).toUpperCase() + c.tipo_comida.slice(1), [
-      ["Descripción", c.descripcion], ["Hora", c.hora], ["Calorías", c.kcal === null ? null : fmt(c.kcal) + " kcal"],
-      ["Proteína", c.proteina_g === null ? null : fmt(c.proteina_g, 1) + " g"], ["Carbohidratos", c.carbos_g === null ? null : fmt(c.carbos_g, 1) + " g"],
-      ["Grasa", c.grasa_g === null ? null : fmt(c.grasa_g, 1) + " g"], ["Valores", c.estimado ? "estimados" : "exactos"]
-    ], "comidas", c.id);
+    abrirHoja(cap(c.tipo_comida), h("div", { style: "display:flex;flex-direction:column;gap:6px" }, lineas([
+      ["Descripción", c.descripcion], ["Hora", c.hora], ["Calorías", vacio(c.kcal) ? null : fmt(c.kcal) + " kcal"],
+      ["Proteína", vacio(c.proteina_g) ? null : fmt(c.proteina_g, 1) + " g"], ["Carbohidratos", vacio(c.carbos_g) ? null : fmt(c.carbos_g, 1) + " g"],
+      ["Grasa", vacio(c.grasa_g) ? null : fmt(c.grasa_g, 1) + " g"], ["Valores", c.estimado === true || c.estimado === "true" ? "estimados" : "exactos"]
+    ]), botonBorrar("comidas", c.id)));
   }
   function detalleEjercicio(e) {
-    detalleBase(e.tipo.charAt(0).toUpperCase() + e.tipo.slice(1), [
-      ["Duración", e.duracion_min ? e.duracion_min + " min" : null], ["Calorías", e.kcal === null ? null : fmt(e.kcal) + " kcal"],
+    abrirHoja(cap(e.tipo), h("div", { style: "display:flex;flex-direction:column;gap:6px" }, lineas([
+      ["Duración", e.duracion_min ? fmt(e.duracion_min) + " min" : null], ["Calorías", vacio(e.kcal) ? null : fmt(e.kcal) + " kcal"],
       ["Fuente", e.fuente], ["Notas", e.notas]
-    ], "ejercicio", e.id);
+    ]), botonBorrar("ejercicio", e.id)));
+  }
+  function detalleGym(g) {
+    abrirHoja(g.ejercicio, h("div", { style: "display:flex;flex-direction:column;gap:6px" },
+      g.rutina ? h("p", { class: "ayuda", text: "Rutina: " + g.rutina }) : null,
+      h("div", { class: "lista" }, g.series.map(function (s) {
+        return h("div", { class: "item" },
+          h("div", { class: "t" }, h("b", { text: "Serie " + fmt(s.numero_serie) }), h("span", { text: fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones) + " repeticiones" })),
+          h("button", { class: "mini-btn", "aria-label": "Borrar serie " + fmt(s.numero_serie), text: "Borrar", onclick: function (ev) {
+            var b = ev.currentTarget;
+            if (!confirm("¿Borrar esta serie?")) return;
+            b.disabled = true;
+            api("borrar", { tabla: "series_gym", id: s.id }).then(function () { cerrarHoja(); aviso("Serie borrada"); cargar(); })
+              .catch(function (e) { b.disabled = false; manejarError(e); });
+          } }));
+      }))));
+  }
+
+  // ---------- Ajustes ----------
+  function abrirDireccion() {
+    var actual = urlServicio();
+    var entrada = h("input", { type: "url", id: "f-servicio", placeholder: "https://script.google.com/macros/s/…/exec", value: actual.indexOf("TU-ID") >= 0 ? "" : actual });
+    var err = h("p", { class: "error" });
+    abrirHoja("Dirección del servicio", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
+      h("p", { class: "ayuda", text: "Pega la «URL de la aplicación web» de tu implementación (Apps Script → Implementar → Administrar implementaciones). Se guarda en este dispositivo; no hace falta tocar GitHub." }),
+      h("label", { for: "f-servicio", text: "Dirección" }), entrada, err,
+      h("button", { class: "btn lima", text: "Guardar dirección", onclick: function () {
+        var u = entrada.value.trim();
+        if (!URL_VALIDA.test(u)) { err.textContent = "La dirección debe empezar con https://script.google.com/macros/s/ y terminar en /exec."; return; }
+        guardarLocal("servicio", u);
+        estado.version = null; estado.tablas = null;
+        cerrarHoja(); aviso("Dirección guardada");
+        if (leerLocal("token")) cargar(); else pantallaEntrada("");
+      } }),
+      leerLocal("servicio") ? h("button", { class: "btn sec", text: "Volver a la dirección de config.js", onclick: function () {
+        borrarLocal("servicio"); estado.version = null; estado.tablas = null; cerrarHoja(); inicio();
+      } }) : null));
   }
 
   function abrirAjustes() {
-    var m = (estado.datos && estado.datos.metas) || {};
+    var m = estado.metas || {};
     var nombres = { proteina_min_g: "Proteína mínima (g)", proteina_max_g: "Proteína máxima (g)", kcal_base: "Calorías base (kcal)", deficit_min_kcal: "Déficit mínimo (kcal)", deficit_max_kcal: "Déficit máximo (kcal)" };
-    var pares = Object.keys(nombres).filter(function (k) { return m[k] !== undefined; }).map(function (k) { return [nombres[k], fmt(m[k])]; });
+    var pares = Object.keys(nombres).filter(function (k) { return !vacio(m[k]); }).map(function (k) { return [nombres[k], fmt(m[k])]; });
+    var viejo = estado.version !== null && estado.version < SERVICIO_REQUERIDO;
+    var respaldo = h("textarea", { rows: 6, readonly: true, hidden: true, "aria-label": "Código del servicio" });
+    var u = urlServicio();
+    var T = estado.tablas;
+
+    var copiarCodigo = h("button", { class: "btn " + (viejo ? "lima" : "sec"), text: "Copiar código del servicio", onclick: function () {
+      fetch("apps-script/Code.gs", { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      }).then(function (codigo) {
+        copiarTexto(codigo, respaldo, "Código copiado. Pégalo en Apps Script (sigue los pasos de abajo).");
+      }).catch(function () { aviso("No pude descargar el código. Ábrelo en GitHub: apps-script/Code.gs", true); });
+    } });
+
     abrirHoja("Metas y ajustes", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
       h("p", { class: "ayuda", text: "Las metas se cambian en la pestaña «metas» de tu hoja de Google." }),
       lineas(pares),
       h("p", { class: "ayuda", text: "Meta de calorías del día = calorías base + ejercicio del día − déficit promedio." }),
-      h("button", { class: "btn sec", text: "Actualizar", onclick: function () { cerrarHoja(); cargar(); } }),
-      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarToken(); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } })
+
+      h("h4", { text: "Estado de la conexión" }),
+      lineas([
+        ["App", "versión " + VERSION_APP],
+        ["Servicio de Google", estado.version === null ? "sin conectar" : "versión " + estado.version + (viejo ? " (desactualizado)" : " (al día)")],
+        ["Dirección", u ? "…" + u.slice(-18) + (leerLocal("servicio") ? " (guardada aquí)" : "") : "sin configurar"],
+        ["Datos en el teléfono", T ? [plural(T.comidas.length, "comida", "comidas"), plural(T.ejercicio.length, "ejercicio", "ejercicios"), plural(T.series_gym.length, "serie", "series"), plural(T.medidas.length, "medida", "medidas")].join(", ") : null],
+        ["Desde", T && estado.desde ? corta(estado.desde) : null],
+        ["Última actualización", estado.cargadoEn ? dos(estado.cargadoEn.getHours()) + ":" + dos(estado.cargadoEn.getMinutes()) : null]
+      ]),
+
+      h("h4", { text: viejo ? "Tu servicio de Google necesita actualizarse" : "Actualizar el servicio de Google" }),
+      h("p", { class: "ayuda", text: viejo
+        ? "Es la última vez que hace falta: desde esta versión, los arreglos llegan solos con la app."
+        : "Solo si la app te lo pide. Hoy está al día." }),
+      copiarCodigo, respaldo,
+      h("ol", { class: "pasos" },
+        h("li", { text: "Abre tu hoja de Google → menú Extensiones → Apps Script." }),
+        h("li", { text: "Haz clic en el código, pulsa Ctrl+A (seleccionar todo), bórralo y pega el código copiado. Guarda con Ctrl+S." }),
+        h("li", { text: "Implementar → Administrar implementaciones → lápiz → en Versión elige «Nueva versión» → Implementar." }),
+        h("li", { text: "No uses «Nueva implementación»: cambia la dirección. Si ya pasó, pon la dirección nueva abajo." }),
+        h("li", { text: "Vuelve aquí y pulsa «Actualizar datos». En «Servicio de Google» debe decir versión " + SERVICIO_REQUERIDO + "." })),
+
+      h("button", { class: "btn sec", text: "Cambiar la dirección del servicio", onclick: abrirDireccion }),
+      h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { estado.version = null; cerrarHoja(); cargar(); } }),
+      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } })
     ));
   }
 
   // ---------- Inicio ----------
+  // Al volver a la app: si cambió el día o pasó un rato, trae los datos nuevos solo.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || !tokenMemoria || hojaActual) return;
+    var ahora = iso(new Date());
+    if (ahora !== hoy) { if (estado.fecha === hoy) estado.fecha = ahora; hoy = ahora; cargar(); return; }
+    if (!estado.cargadoEn || Date.now() - estado.cargadoEn.getTime() > 2 * 60 * 1000) cargar();
+  });
+
+  function inicio() {
+    raiz.textContent = "";
+    if (!urlConfigurada()) {
+      raiz.appendChild(h("div", { class: "entrada" }, h("h1", { text: "Falta la dirección del servicio" }),
+        h("p", { class: "ayuda", text: "Pega la dirección de tu servicio de Google (termina en /exec)." }),
+        h("button", { class: "btn lima", text: "Poner la dirección", onclick: abrirDireccion })));
+      return;
+    }
+    tokenMemoria = leerLocal("token");
+    if (!tokenMemoria) pantallaEntrada(""); else cargar();
+  }
+
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function () { /* la app funciona igual */ });
   }
-  if (!CFG.SCRIPT_URL || CFG.SCRIPT_URL.indexOf("TU-ID") >= 0) {
-    raiz.appendChild(h("div", { class: "entrada" }, h("h1", { text: "Falta configurar" }),
-      h("p", { class: "ayuda", text: "Abre config.js y pega la dirección de tu servicio de Google (README, paso 4)." })));
-    return;
-  }
-  tokenMemoria = leerToken();
-  if (!tokenMemoria) pantallaEntrada(""); else cargar();
+  inicio();
 })();
