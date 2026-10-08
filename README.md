@@ -37,20 +37,28 @@ Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya
 3. Nombre: `TOKEN`. Valor: una contraseña **larga** (mínimo 16 caracteres, por ejemplo cuatro palabras al azar con números). Guárdala en tu gestor de contraseñas.
 4. Guarda.
 
-## Paso 4b. Activar el chat (opcional, recomendado)
+## Paso 4b. Registrar con ayuda de Claude, sin gastar API (recomendado)
 
-El chat de la app lee lo que escribes ("almuerzo: pollo con arroz"), estima calorías y macros con Claude, valida cantidades y lo guarda directo. Te muestra lo guardado, tus totales del día y un botón **Deshacer**. Si algo es ambiguo, te pregunta antes de guardar.
+No necesitas configurar nada extra para esto. Funciona con tu plan de Claude y no gasta créditos de la Consola de API.
 
-1. Crea una cuenta en <https://console.anthropic.com>, agrega un método de pago y crea una **clave de API**.
-2. En la misma consola, **fija un límite de gasto mensual** (por ejemplo 10 USD) para tener tranquilidad.
-3. En Apps Script, en las mismas **Propiedades de la secuencia de comandos** del Paso 4, agrega:
+1. En la app, toca **+** y abre la pestaña **Pegar**.
+2. Toca **Copiar instrucciones para Claude** y pégalas **una sola vez** en un chat de Claude (mejor dentro de un Proyecto, para que las recuerde).
+3. Desde ahí, cuéntale a Claude lo que comiste, tu peso, tu sueño o tu ejercicio. Él estima calorías y macros, te dice cuánto llevas del día contra tus metas y te devuelve **un bloque de datos** al final.
+4. Copia ese bloque, pégalo en la pestaña **Pegar** y toca **Revisar**. Ves la lista de lo que se va a guardar, y si está bien, **Guardar**.
+
+Lo que no se entiende o es inválido no se guarda, y la app te lo avisa. Si pegas algo con datos distintos a los esperados, el servicio rechaza solo ese registro.
+
+## Paso 4c. Chat dentro de la app (opcional, **gasta créditos de la API**)
+
+Esto es otra forma, más cómoda pero con costo: el chat vive dentro de la app y guarda directo, sin copiar y pegar. **Gasta los créditos de la Consola de API** (console.anthropic.com), no tu plan de Claude ni tus créditos de la nube. Si no quieres gastarlos, sáltate este paso: sin la clave el chat no aparece y no cuesta nada.
+
+1. Crea una clave de API en <https://console.anthropic.com> y **fija un límite de gasto mensual**.
+2. En Apps Script, en las **Propiedades de la secuencia de comandos** del Paso 4, agrega:
    - `ANTHROPIC_API_KEY` = tu clave de API.
-   - (Opcional) `MODELO` = el modelo a usar. Por defecto es `claude-opus-5-5`. Con `claude-sonnet-5-5` el costo baja aproximadamente a la mitad.
-4. Si ya habías publicado el servicio (Paso 5), actualiza la implementación con **Nueva versión**. Si no, sigue normal.
+   - (Opcional) `MODELO` = `claude-sonnet-5-5`, que cuesta aproximadamente la mitad que el modelo por defecto (`claude-opus-5-5`). No uses `claude-haiku-4-5`: el código envía un ajuste que ese modelo no admite.
+3. Publica una **nueva versión** de la implementación (Implementar → Administrar implementaciones → editar → Nueva versión).
 
-**Costo (estimación):** cada mensaje cuesta alrededor de 1 a 2 centavos de dólar. Si registras unas 15 veces al día, serían unos 5 a 10 USD al mes. Sin el chat, la app sigue funcionando gratis con los formularios.
-
-**Privacidad:** lo que escribes en el chat se envía a la API de Claude para poder estimar los valores. Los formularios no envían nada a Claude.
+**Costo (estimación):** entre 1 y 2 centavos de dólar por mensaje con el modelo por defecto. Lo que escribes se envía a la API de Claude para estimar los valores.
 
 ## Paso 5. Publicar el servicio
 
@@ -85,7 +93,7 @@ El chat de la app lee lo que escribes ("almuerzo: pollo con arroz"), estima calo
 ## Cómo se usa
 
 - **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas y ejercicio del día. Con las flechas y la tira de días puedes ver otros días.
-- **Botón +:** abre el **Chat** (si lo activaste) o los formularios de comida, medidas (peso, cintura, sueño) y ejercicio. En el chat puedes escribir cosas como «desayuno 3 huevos y 2 tostadas», «peso 72,4, cintura 85, dormí 7 horas», «caminata 40 minutos» o «press banca 4 series de 8 con 60 kg». Si Claude estima mal, toca **Deshacer** o dile cómo corregirlo.
+- **Botón +:** abre **Pegar** (registrar con ayuda de tu chat de Claude), los formularios de comida, medidas (peso, cintura, sueño) y ejercicio, y el **Chat** si activaste el Paso 4c. En Claude puedes escribir cosas como «desayuno 3 huevos y 2 tostadas», «peso 72,4, cintura 85, dormí 7 horas», «caminata 40 minutos» o «press banca 4 series de 8 con 60 kg».
 - **Tocar una comida o un ejercicio:** ver el detalle o borrarlo.
 - **Medidas:** un registro por día. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes.
 - **Meta de calorías del día** = calorías base + ejercicio del día − déficit promedio. Las cifras se cambian en la pestaña `metas` de tu hoja.
@@ -104,5 +112,5 @@ El chat de la app lee lo que escribes ("almuerzo: pollo con arroz"), estima calo
 - Toda petición exige tu contraseña, que se compara en el servicio de Google. Sin ella no se lee ni se escribe nada.
 - La contraseña no está en el repositorio: vive en las propiedades de tu proyecto de Apps Script y en tu celular.
 - El servicio valida cada dato (tipos de comida, rangos, fechas) antes de guardarlo, también lo que propone el chat.
-- La clave de API de Claude vive solo en las propiedades de tu proyecto de Apps Script, nunca en el repositorio ni en el celular.
+- Si activas el chat con API (Paso 4c), la clave vive solo en las propiedades de tu proyecto de Apps Script, nunca en el repositorio ni en el celular.
 - Los datos están en tu cuenta de Google. Nadie más puede abrir la hoja a menos que tú la compartas.

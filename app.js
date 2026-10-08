@@ -77,8 +77,12 @@
     var t = document.getElementById("toast");
     t.textContent = txt;
     t.className = "toast ver" + (error ? " err" : "");
+    try { if (t.showPopover && !t.matches(":popover-open")) t.showPopover(); } catch (e) { /* sin popover: se ve igual */ }
     clearTimeout(toastT);
-    toastT = setTimeout(function () { t.className = "toast"; }, 3200);
+    toastT = setTimeout(function () {
+      t.className = "toast";
+      try { if (t.hidePopover && t.matches(":popover-open")) t.hidePopover(); } catch (e) { /* nada */ }
+    }, 3200);
   }
 
   // ---------- Contraseña y conexión con Google ----------
@@ -284,7 +288,7 @@
 
     raiz.appendChild(h("nav", { class: "nav", "aria-label": "Principal" },
       h("button", { class: "tab on", "aria-label": "Hoy", onclick: function () { estado.fecha = hoy; cargar(); } }, icono("home"), "Hoy"),
-      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.datos && estado.datos.chat ? "chat" : "comida"); } }, icono("plus", 28)),
+      h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.datos && estado.datos.chat ? "chat" : "pegar"); } }, icono("plus", 28)),
       h("button", { class: "tab", "aria-label": "Ajustes", onclick: abrirAjustes }, icono("ajustes"), "Ajustes")
     ));
   }
@@ -458,10 +462,128 @@
       h("p", { class: "ayuda", text: "Lo que escribas se envía a Claude para estimar los valores. Revisa lo guardado; puedes deshacerlo." }));
   }
 
+  // ---------- Pegar desde Claude (sin costo de API) ----------
+  var INSTRUCCIONES_CLAUDE = [
+    "Eres mi asistente de seguimiento personal. Soy un hombre de 41 años, 1,72 m y unos 72 kg; busco ganar masa muscular y reducir grasa abdominal.",
+    "Mis metas: proteína de 130 a 160 g al día; calorías cerca del mantenimiento (unas 2.500 kcal más el ejercicio del día), con un déficit de 200 a 300 kcal en días normales.",
+    "",
+    "Cuando te cuente lo que comí, mi peso, cintura, sueño o ejercicio, haz esto:",
+    "1. Estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que te dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.",
+    "2. Si algo es ambiguo o las cantidades parecen raras, hazme UNA pregunta corta antes de dar los datos.",
+    "3. Respóndeme en español, breve, con el total acumulado del día contra mis metas (llevas X kcal y Y g de proteína; te faltan Z).",
+    "4. Termina SIEMPRE con UN solo bloque de código con una lista JSON de lo nuevo (solo lo de este mensaje), sin texto dentro del bloque.",
+    "",
+    "Formato de cada registro (usa solo los campos que corresponden; fecha AAAA-MM-DD, hoy si no te digo otra; hora HH:MM opcional):",
+    '{"tabla":"comidas","fecha":"2026-10-08","hora":"13:30","tipo_comida":"almuerzo","descripcion":"Pollo, arroz y ensalada","kcal":620,"proteina_g":46,"carbos_g":60,"grasa_g":12,"estimado":true}',
+    '{"tabla":"medidas","fecha":"2026-10-08","peso_kg":72.4,"cintura_cm":85.5,"horas_sueno":7}',
+    '{"tabla":"ejercicio","fecha":"2026-10-08","tipo":"caminata","duracion_min":40,"kcal":210,"fuente":"estimado","notas":""}',
+    '{"tabla":"series_gym","fecha":"2026-10-08","rutina":"Pecho","ejercicio":"Press banca","numero_serie":1,"peso_kg":60,"repeticiones":8}',
+    "",
+    "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
+    "En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
+    "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
+  ].join("\n");
+
+  var TABLAS_VALIDAS = { comidas: 1, medidas: 1, ejercicio: 1, series_gym: 1 };
+
+  function leerRegistros(texto) {
+    var t = String(texto || "").replace(/```[a-zA-Z]*/g, "").trim();
+    var datos = null;
+    try { datos = JSON.parse(t); } catch (e1) {
+      var ini = t.indexOf("["), fin = t.lastIndexOf("]");
+      if (ini >= 0 && fin > ini) { try { datos = JSON.parse(t.slice(ini, fin + 1)); } catch (e2) { datos = null; } }
+      if (!datos) {
+        var lineas = t.split("\n").map(function (x) { return x.trim().replace(/,$/, ""); }).filter(function (x) { return x.charAt(0) === "{"; });
+        try { datos = lineas.map(function (x) { return JSON.parse(x); }); } catch (e3) { datos = null; }
+      }
+    }
+    if (datos && !Array.isArray(datos)) datos = [datos];
+    if (!datos || !datos.length) throw new Error("No encontré datos. Pega exactamente el bloque que te dio Claude.");
+    if (datos.length > 50) throw new Error("Son demasiados registros de una vez (máximo 50).");
+    return datos;
+  }
+
+  function describirRegistro(r) {
+    if (!r || typeof r !== "object" || !TABLAS_VALIDAS[r.tabla]) return { ok: false, texto: "Registro no reconocido" };
+    var n = function (v) { return v === null || v === undefined || v === "" ? "?" : fmt(v, 1); };
+    if (r.tabla === "comidas") return { ok: !!(r.tipo_comida && r.descripcion), texto: String(r.tipo_comida || "?") + ": " + String(r.descripcion || "?") + " · " + n(r.kcal) + " kcal · " + n(r.proteina_g) + " g proteína" + (r.estimado ? " (estimado)" : "") };
+    if (r.tabla === "medidas") {
+      var p = [];
+      if (r.peso_kg != null && r.peso_kg !== "") p.push(n(r.peso_kg) + " kg");
+      if (r.cintura_cm != null && r.cintura_cm !== "") p.push("cintura " + n(r.cintura_cm) + " cm");
+      if (r.horas_sueno != null && r.horas_sueno !== "") p.push(n(r.horas_sueno) + " h de sueño");
+      return { ok: p.length > 0, texto: "Medidas: " + (p.join(" · ") || "sin datos") };
+    }
+    if (r.tabla === "ejercicio") return { ok: !!r.tipo, texto: "Ejercicio: " + String(r.tipo || "?") + (r.duracion_min ? " · " + n(r.duracion_min) + " min" : "") + (r.kcal != null && r.kcal !== "" ? " · " + n(r.kcal) + " kcal" : "") };
+    return { ok: !!(r.ejercicio && r.numero_serie), texto: "Serie: " + String(r.ejercicio || "?") + " · serie " + n(r.numero_serie) + ": " + n(r.peso_kg) + " kg × " + n(r.repeticiones) };
+  }
+
+  function enviarRegistro(r) {
+    var fila = {};
+    Object.keys(r).forEach(function (k) { if (k !== "tabla") fila[k] = r[k]; });
+    if (!fila.fecha) fila.fecha = estado.fecha;
+    return r.tabla === "medidas" ? api("medidas", { fila: fila }) : api("agregar", { tabla: r.tabla, fila: fila });
+  }
+
+  function formPegar() {
+    var area = h("textarea", { rows: 6, "aria-label": "Datos de Claude", placeholder: "Pega aquí el bloque con corchetes [ … ] que te dio Claude" });
+    var vista = h("div", { class: "lista" });
+    var revisar = h("button", { class: "btn lima", type: "button", text: "Revisar" });
+    var guardar = h("button", { class: "btn", type: "button", text: "Guardar", hidden: true });
+    var copiar = h("button", { class: "btn sec", type: "button", text: "Copiar instrucciones para Claude" });
+    var respaldo = h("textarea", { rows: 6, readonly: true, hidden: true, "aria-label": "Instrucciones para Claude" });
+    var validos = [];
+
+    copiar.addEventListener("click", function () {
+      var listo = function () { respaldo.hidden = true; aviso("Instrucciones copiadas. Pégalas en un chat de Claude."); };
+      var plan_b = function () { respaldo.value = INSTRUCCIONES_CLAUDE; respaldo.hidden = false; respaldo.focus(); respaldo.select(); aviso("Copia el texto de abajo y pégalo en Claude."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(INSTRUCCIONES_CLAUDE).then(listo, plan_b); else plan_b();
+    });
+
+    revisar.addEventListener("click", function () {
+      vista.textContent = ""; guardar.hidden = true; validos = [];
+      var lista;
+      try { lista = leerRegistros(area.value); } catch (e) { return aviso(e.message, true); }
+      lista.forEach(function (r) {
+        var d = describirRegistro(r);
+        if (d.ok) validos.push(r);
+        vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: (d.ok ? "" : "No se guardará: ") + d.texto }))));
+      });
+      if (validos.length) { guardar.textContent = "Guardar " + validos.length + (validos.length === 1 ? " registro" : " registros"); guardar.hidden = false; }
+      else aviso("Ningún registro es válido.", true);
+    });
+
+    guardar.addEventListener("click", function () {
+      guardar.disabled = true; revisar.disabled = true;
+      var res = { ok: 0, fallos: [] };
+      validos.reduce(function (cadena, r) {
+        return cadena.then(function () {
+          return enviarRegistro(r).then(function () { res.ok++; }, function (e) {
+            if (e && e.noAutorizado) throw e;
+            res.fallos.push(describirRegistro(r).texto + " → " + (e && e.message ? e.message : "error"));
+          });
+        });
+      }, Promise.resolve()).then(function () {
+        guardar.disabled = false; revisar.disabled = false;
+        if (res.ok) cargar();
+        if (!res.fallos.length) { cerrarHoja(); aviso(res.ok + (res.ok === 1 ? " registro guardado" : " registros guardados")); return; }
+        aviso("Guardé " + res.ok + " y fallaron " + res.fallos.length + ".", true);
+        vista.textContent = "";
+        res.fallos.forEach(function (f) { vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: "No se guardó: " + f })))); });
+        guardar.hidden = true; area.value = "";
+      }).catch(function (e) { guardar.disabled = false; revisar.disabled = false; manejarError(e); });
+    });
+
+    return h("div", { class: "chat" },
+      h("p", { class: "ayuda", text: "1) Copia las instrucciones y pégalas una vez en un chat de Claude. 2) Cuéntale lo que comiste, tu peso, etc. 3) Copia el bloque de datos que te devuelva y pégalo aquí." }),
+      copiar, respaldo, area, revisar, vista, guardar,
+      h("p", { class: "ayuda", text: "Usa tu plan de Claude, no la API. Revisa la lista antes de guardar." }));
+  }
+
   function abrirAgregar(tab) {
     var cuerpo = h("div", {});
     var tabs = h("div", { class: "tabs", role: "tablist" });
-    var defs = (estado.datos && estado.datos.chat ? [["chat", "Chat", formChat]] : []).concat([["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
+    var defs = (estado.datos && estado.datos.chat ? [["chat", "Chat", formChat]] : []).concat([["pegar", "Pegar", formPegar], ["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
     function mostrar(clave) {
       cuerpo.textContent = "";
       Array.prototype.forEach.call(tabs.children, function (b, i) { b.className = defs[i][0] === clave ? "on" : ""; b.setAttribute("aria-selected", defs[i][0] === clave); });
