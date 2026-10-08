@@ -98,6 +98,20 @@ Luego:
 
 ---
 
+## Si algo falla
+
+La app ahora dice qué pasó. Qué significa cada mensaje:
+
+| Mensaje | Qué significa | Qué hacer |
+|---|---|---|
+| **Falta configurar** | `config.js` todavía tiene la dirección de ejemplo | Pega la dirección de tu servicio de Google (Paso 6) |
+| **La contraseña no es correcta.** | El texto no coincide con la propiedad `TOKEN` de Apps Script | Revisa que se llame exactamente `TOKEN`, que tenga 16 caracteres o más y que no tenga espacios; vuelve a escribirla a mano y guarda |
+| **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección de `config.js` es incorrecta | Revisa tu conexión y que la dirección termine en `/exec` |
+| **Tu servicio de Google respondió algo que no es de la app…** | Dirección de una implementación vieja, o acceso mal configurado | En Apps Script: Implementar → Administrar implementaciones; confirma que la dirección es la activa y que **Quién tiene acceso** es **Cualquier usuario** |
+| **Falta la pestaña … Ejecuta setup()** | No se crearon las pestañas de la hoja | En Apps Script, ejecuta la función `setup` (Paso 3) |
+
+Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas ayuda, copia ese detalle completo. Otra pista útil: en Apps Script, el menú izquierdo **Ejecuciones** muestra cada llamada de la app y, si falló, el error.
+
 ## Cómo se usa
 
 - **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas y ejercicio del día. Con las flechas y la tira de días puedes ver otros días.
