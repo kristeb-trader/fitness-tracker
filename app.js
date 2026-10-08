@@ -463,9 +463,16 @@
   }
 
   // ---------- Pegar desde Claude (sin costo de API) ----------
-  var INSTRUCCIONES_CLAUDE = [
-    "Eres mi asistente de seguimiento personal. Soy un hombre de 41 años, 1,72 m y unos 72 kg; busco ganar masa muscular y reducir grasa abdominal.",
-    "Mis metas: proteína de 130 a 160 g al día; calorías cerca del mantenimiento (unas 2.500 kcal más el ejercicio del día), con un déficit de 200 a 300 kcal en días normales.",
+  // Las metas salen de la pestaña «metas» de tu hoja; el perfil lo escribes tú en el chat de Claude.
+  function instruccionesClaude() {
+    var m = (estado.datos && estado.datos.metas) || {};
+    var partes = [];
+    if (m.proteina_min_g != null && m.proteina_max_g != null) partes.push("proteína de " + fmt(m.proteina_min_g) + " a " + fmt(m.proteina_max_g) + " g al día");
+    if (m.kcal_base != null) partes.push("calorías cerca del mantenimiento (unas " + fmt(m.kcal_base) + " kcal más el ejercicio del día)" + (m.deficit_min_kcal != null && m.deficit_max_kcal != null ? ", con un déficit de " + fmt(m.deficit_min_kcal) + " a " + fmt(m.deficit_max_kcal) + " kcal en días normales" : ""));
+    return [
+    "Eres mi asistente de seguimiento personal.",
+    "Mi perfil: [escribe aquí tu edad, estatura, peso y objetivo].",
+    partes.length ? "Mis metas: " + partes.join("; ") + "." : "",
     "",
     "Cuando te cuente lo que comí, mi peso, cintura, sueño o ejercicio, haz esto:",
     "1. Estima kcal, proteína, carbos y grasa con porciones típicas. estimado=true salvo que te dé etiqueta o pesos exactos. Una comida con varios alimentos es UN registro con los totales.",
@@ -482,7 +489,8 @@
     "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
     "En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
     "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
-  ].join("\n");
+    ].join("\n");
+  }
 
   var TABLAS_VALIDAS = { comidas: 1, medidas: 1, ejercicio: 1, series_gym: 1 };
 
@@ -536,8 +544,8 @@
 
     copiar.addEventListener("click", function () {
       var listo = function () { respaldo.hidden = true; aviso("Instrucciones copiadas. Pégalas en un chat de Claude."); };
-      var plan_b = function () { respaldo.value = INSTRUCCIONES_CLAUDE; respaldo.hidden = false; respaldo.focus(); respaldo.select(); aviso("Copia el texto de abajo y pégalo en Claude."); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(INSTRUCCIONES_CLAUDE).then(listo, plan_b); else plan_b();
+      var plan_b = function () { respaldo.value = instruccionesClaude(); respaldo.hidden = false; respaldo.focus(); respaldo.select(); aviso("Copia el texto de abajo y pégalo en Claude."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(instruccionesClaude()).then(listo, plan_b); else plan_b();
     });
 
     revisar.addEventListener("click", function () {
