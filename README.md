@@ -108,6 +108,7 @@ La app ahora dice qué pasó. Qué significa cada mensaje:
 | **La contraseña no es correcta.** | El texto no coincide con la propiedad `TOKEN` de Apps Script | Revisa que se llame exactamente `TOKEN`, que tenga 16 caracteres o más y que no tenga espacios; vuelve a escribirla a mano y guarda |
 | **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección de `config.js` es incorrecta | Revisa tu conexión y que la dirección termine en `/exec` |
 | **Tu servicio de Google respondió algo que no es de la app…** | Dirección de una implementación vieja, o acceso mal configurado | En Apps Script: Implementar → Administrar implementaciones; confirma que la dirección es la activa y que **Quién tiene acceso** es **Cualquier usuario** |
+| **Los registros están en la hoja pero no salen en la app** | Sheets guardó la fecha como fecha real y una versión anterior del servicio no la reconocía | Pega la última versión de `apps-script/Code.gs` en Apps Script y publica una **Nueva versión** (Implementar → Administrar implementaciones → lápiz → Nueva versión). Los registros que ya tienes empiezan a verse solos |
 | **Falta la pestaña … Ejecuta setup()** | No se crearon las pestañas de la hoja | En Apps Script, ejecuta la función `setup` (Paso 3) |
 
 Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas ayuda, copia ese detalle completo. Otra pista útil: en Apps Script, el menú izquierdo **Ejecuciones** muestra cada llamada de la app y, si falló, el error.

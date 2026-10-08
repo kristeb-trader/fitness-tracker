@@ -73,7 +73,7 @@ function setup() {
     hoja.setFrozenRows(1);
     TABLAS[nombre].forEach(function (k, i) {
       // fecha y hora como texto, para que Sheets no las convierta en fechas raras
-      if (k.t === 'fecha' || k.t === 'hora' || k.t === 'id') hoja.getRange(2, i + 1, 2000, 1).setNumberFormat('@');
+      if (k.t === 'fecha' || k.t === 'hora' || k.t === 'id') hoja.getRange(2, i + 1, Math.max(hoja.getMaxRows() - 1, 1), 1).setNumberFormat('@');
     });
   });
   var metas = ss.getSheetByName('metas');
@@ -132,6 +132,20 @@ function hoja(nombre) {
   return h;
 }
 
+/** Sheets puede guardar «2026-10-09» como una fecha real. La devolvemos siempre como texto. */
+function comoTexto(v, tipo) {
+  if (v instanceof Date) {
+    var zona = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    return Utilities.formatDate(v, zona, tipo === 'hora' ? 'HH:mm' : 'yyyy-MM-dd');
+  }
+  return v;
+}
+
+function tipoColumna(nombre, col) {
+  var t = TABLAS[nombre].filter(function (k) { return k.c === col; })[0];
+  return t ? t.t : null;
+}
+
 function leer(nombre) {
   var valores = hoja(nombre).getDataRange().getValues();
   var cols = valores[0];
@@ -139,9 +153,24 @@ function leer(nombre) {
     .filter(function (f) { return f.some(function (v) { return v !== ''; }); })
     .map(function (f) {
       var o = {};
-      cols.forEach(function (c, i) { o[c] = f[i] === '' ? null : f[i]; });
+      cols.forEach(function (c, i) { o[c] = f[i] === '' ? null : comoTexto(f[i], tipoColumna(nombre, c)); });
       return o;
     });
+}
+
+/** Agrega una fila nueva forzando texto en fecha, hora e id, para que Sheets no las convierta. */
+function escribirFila(h, nombre, obj) {
+  var cols = TABLAS[nombre];
+  var r = h.getLastRow() + 1;
+  var i = 0;
+  while (i < cols.length) {
+    var esTexto = cols[i].t === 'fecha' || cols[i].t === 'hora' || cols[i].t === 'id';
+    var j = i;
+    while (j < cols.length && (cols[j].t === 'fecha' || cols[j].t === 'hora' || cols[j].t === 'id') === esTexto) j++;
+    if (esTexto) h.getRange(r, i + 1, 1, j - i).setNumberFormat('@');
+    i = j;
+  }
+  h.getRange(r, 1, 1, cols.length).setValues([fila(nombre, obj)]);
 }
 
 function ahora() { return new Date().toISOString(); }
@@ -189,7 +218,7 @@ function fila(nombre, obj) {
 function agregar(nombre, datos) {
   if (nombre !== 'comidas' && nombre !== 'ejercicio' && nombre !== 'series_gym') throw new Error('Tabla no permitida');
   var obj = validar(nombre, datos);
-  hoja(nombre).appendRow(fila(nombre, obj));
+  escribirFila(hoja(nombre), nombre, obj);
   return { ok: true, id: obj.id };
 }
 
@@ -203,14 +232,14 @@ function guardarMedidas(datos) {
   var idx = {};
   cols.forEach(function (c, i) { idx[c] = i; });
   for (var r = 1; r < valores.length; r++) {
-    if (String(valores[r][idx.fecha]) === obj.fecha) {
+    if (String(comoTexto(valores[r][idx.fecha], 'fecha')) === obj.fecha) {
       ['peso_kg', 'cintura_cm', 'horas_sueno'].forEach(function (c) {
         if (obj[c] !== null) h.getRange(r + 1, idx[c] + 1).setValue(obj[c]);
       });
       return { ok: true, actualizado: true };
     }
   }
-  h.appendRow(fila('medidas', obj));
+  escribirFila(h, 'medidas', obj);
   return { ok: true, actualizado: false };
 }
 
