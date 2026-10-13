@@ -138,7 +138,7 @@
       signal: control ? control.signal : undefined
     }).catch(function (x) {
       var tardo = x && x.name === "AbortError";
-      var e = new Error(tardo ? "Tu servicio de Google tardó demasiado en responder. Inténtalo de nuevo." : "No se pudo conectar con tu servicio de Google. Revisa tu internet y la dirección del servicio (Ajustes).");
+      var e = new Error(tardo ? "Tu servicio de Google tardó demasiado en responder. Inténtalo de nuevo." : "No se pudo conectar con tu servicio de Google. Revisa tu internet y la dirección del servicio (Ajustes → Opciones avanzadas).");
       e.red = true;
       e.detalle = String((x && x.message) || x);
       throw e;
@@ -880,36 +880,31 @@
       }).catch(function () { aviso("No pude descargar el código. Ábrelo en GitHub: apps-script/Code.gs", true); });
     } });
 
-    abrirHoja("Metas y ajustes", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
-      h("p", { class: "ayuda", text: "Las metas se cambian en la pestaña «metas» de tu hoja de Google." }),
+    // Lo técnico va plegado: solo hace falta si cambia la dirección o hay que actualizar el servicio.
+    var avanzado = h("details", { class: "avanzado", open: viejo },
+      h("summary", { text: viejo ? "Actualiza tu servicio de Google" : "Opciones avanzadas" }),
+      h("div", { style: "display:flex;flex-direction:column;gap:8px;margin-top:8px" },
+        lineas([
+          ["Servicio de Google", estado.version === null ? "sin conectar" : "versión " + estado.version + (viejo ? " (desactualizado)" : " (al día)")],
+          ["Dirección", u ? "…" + u.slice(-18) : "sin configurar"],
+          ["Datos en el teléfono", T ? [plural(T.comidas.length, "comida", "comidas"), plural(T.ejercicio.length, "ejercicio", "ejercicios"), plural(T.series_gym.length, "serie", "series"), plural(T.medidas.length, "medida", "medidas")].join(", ") : null]
+        ]),
+        viejo ? h("p", { class: "ayuda", text: "Copia el código y sigue los pasos. Es la última vez que hace falta." }) : null,
+        copiarCodigo, respaldo,
+        h("ol", { class: "pasos" },
+          h("li", { text: "Abre tu hoja de Google → menú Extensiones → Apps Script." }),
+          h("li", { text: "Haz clic en el código, pulsa Ctrl+A, bórralo y pega el código copiado. Guarda con Ctrl+S." }),
+          h("li", { text: "Implementar → Administrar implementaciones → lápiz → en Versión elige «Nueva versión» → Implementar." }),
+          h("li", { text: "Vuelve aquí y pulsa «Actualizar datos»." })),
+        h("button", { class: "btn sec", text: "Cambiar la dirección del servicio", onclick: abrirDireccion })));
+
+    abrirHoja("Ajustes", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
+      h("h4", { text: "Mis metas" }),
       lineas(pares),
-      h("p", { class: "ayuda", text: "Meta de calorías del día = calorías base + ejercicio del día − déficit promedio." }),
-
-      h("h4", { text: "Estado de la conexión" }),
-      lineas([
-        ["App", "versión " + VERSION_APP],
-        ["Servicio de Google", estado.version === null ? "sin conectar" : "versión " + estado.version + (viejo ? " (desactualizado)" : " (al día)")],
-        ["Dirección", u ? "…" + u.slice(-18) + (leerLocal("servicio") ? " (guardada aquí)" : "") : "sin configurar"],
-        ["Datos en el teléfono", T ? [plural(T.comidas.length, "comida", "comidas"), plural(T.ejercicio.length, "ejercicio", "ejercicios"), plural(T.series_gym.length, "serie", "series"), plural(T.medidas.length, "medida", "medidas")].join(", ") : null],
-        ["Desde", T && estado.desde ? corta(estado.desde) : null],
-        ["Última actualización", estado.cargadoEn ? dos(estado.cargadoEn.getHours()) + ":" + dos(estado.cargadoEn.getMinutes()) : null]
-      ]),
-
-      h("h4", { text: viejo ? "Tu servicio de Google necesita actualizarse" : "Actualizar el servicio de Google" }),
-      h("p", { class: "ayuda", text: viejo
-        ? "Es la última vez que hace falta: desde esta versión, los arreglos llegan solos con la app."
-        : "Solo si la app te lo pide. Hoy está al día." }),
-      copiarCodigo, respaldo,
-      h("ol", { class: "pasos" },
-        h("li", { text: "Abre tu hoja de Google → menú Extensiones → Apps Script." }),
-        h("li", { text: "Haz clic en el código, pulsa Ctrl+A (seleccionar todo), bórralo y pega el código copiado. Guarda con Ctrl+S." }),
-        h("li", { text: "Implementar → Administrar implementaciones → lápiz → en Versión elige «Nueva versión» → Implementar." }),
-        h("li", { text: "No uses «Nueva implementación»: cambia la dirección. Si ya pasó, pon la dirección nueva abajo." }),
-        h("li", { text: "Vuelve aquí y pulsa «Actualizar datos». En «Servicio de Google» debe decir versión " + SERVICIO_REQUERIDO + "." })),
-
-      h("button", { class: "btn sec", text: "Cambiar la dirección del servicio", onclick: abrirDireccion }),
+      h("p", { class: "ayuda", text: "Se cambian en la pestaña «metas» de tu hoja de Google." }),
       h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { estado.version = null; cerrarHoja(); cargar(); } }),
-      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } })
+      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
+      avanzado
     ));
   }
 

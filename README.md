@@ -71,13 +71,13 @@ Esto es otra forma, más cómoda pero con costo: el chat vive dentro de la app y
 
 > "Cualquier usuario" solo significa que la dirección responde. Sin tu contraseña no devuelve ningún dato. No compartas la dirección ni la contraseña. Si crees que se filtró, cambia el valor de `TOKEN` y listo.
 >
-> Si algún día actualizas `Code.gs`, usa **Implementar → Administrar implementaciones → lápiz → Nueva versión**. No uses «Nueva implementación»: crea una dirección distinta. La app te guía con un botón que copia el código (Ajustes → Actualizar el servicio de Google).
+> Si algún día actualizas `Code.gs`, usa **Implementar → Administrar implementaciones → lápiz → Nueva versión**. No uses «Nueva implementación»: crea una dirección distinta. La app te guía con un botón que copia el código (Ajustes → Opciones avanzadas).
 
 ## Paso 6. Conectar la app
 
 Elige una de dos formas:
 
-- **Desde la app (más fácil):** al abrirla la primera vez, si no encuentra la dirección, te la pide. También puedes cambiarla cuando quieras en **Ajustes → Cambiar la dirección del servicio**. Se guarda en ese dispositivo.
+- **Desde la app (más fácil):** al abrirla la primera vez, si no encuentra la dirección, te la pide. También puedes cambiarla cuando quieras en **Ajustes → Opciones avanzadas → Cambiar la dirección del servicio**. Se guarda en ese dispositivo.
 - **En GitHub, para todos los dispositivos:** edita `config.js` y reemplaza la dirección. Antes de guardar, revisa que arriba a la izquierda diga la rama **`main`**, que es la que publica GitHub Pages.
 
 ## Paso 7. Publicar la app
@@ -104,15 +104,15 @@ Luego:
 
 ## Si algo falla
 
-Primero abre **Ajustes → Estado de la conexión**. Ahí ves la versión de la app y del servicio, la dirección que se está usando y cuántos registros tiene el teléfono.
+Primero abre **Ajustes → Opciones avanzadas** (está plegado al final). Ahí ves la versión del servicio, la dirección que se está usando y cuántos registros tiene el teléfono.
 
 | Lo que ves | Qué significa | Qué hacer |
 |---|---|---|
 | Aviso amarillo **Actualiza tu servicio de Google** | Tu Apps Script tiene una versión anterior | Toca **Ver cómo**: el botón copia el código y te da los pasos |
 | **Falta la dirección del servicio** | Ni `config.js` ni el teléfono tienen la dirección | Toca **Poner la dirección** y pega la que termina en `/exec` |
 | **La contraseña no es correcta.** | El texto no coincide con la propiedad `TOKEN` | Revisa que se llame exactamente `TOKEN` y tenga 16 caracteres o más. Los espacios al inicio o al final ya no importan |
-| **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección es incorrecta | Revisa tu conexión y la dirección en Ajustes |
-| **Tu servicio de Google respondió algo que no es de la app…** | La dirección es de una implementación vieja o el acceso está mal | En Apps Script: Implementar → Administrar implementaciones. Copia la URL de la implementación activa a la app (Ajustes → Cambiar la dirección) y confirma **Quién tiene acceso: Cualquier usuario** |
+| **No se pudo conectar con tu servicio de Google…** | Sin internet, o la dirección es incorrecta | Revisa tu conexión y la dirección en Ajustes → Opciones avanzadas |
+| **Tu servicio de Google respondió algo que no es de la app…** | La dirección es de una implementación vieja o el acceso está mal | En Apps Script: Implementar → Administrar implementaciones. Copia la URL de la implementación activa a la app (Ajustes → Opciones avanzadas → Cambiar la dirección) y confirma **Quién tiene acceso: Cualquier usuario** |
 | **Falta la pestaña … ejecuta la función setup** | No se crearon las pestañas | En Apps Script, ejecuta `setup` (Paso 3). Es seguro repetirlo |
 
 Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas ayuda, copia ese detalle completo.

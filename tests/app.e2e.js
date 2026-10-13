@@ -185,9 +185,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog button[aria-label="Borrar serie 2"]');
       await page.waitForFunction(() => /Press banca · 1 serie/.test(document.body.innerText));
     });
-    await prueba('Ajustes: estado al día y botón que copia el código del servicio', async () => {
+    await prueba('Ajustes: simple; lo técnico plegado en «Opciones avanzadas», con el botón que copia el código', async () => {
       await page.click('.nav [aria-label="Ajustes"]');
-      await page.waitForSelector('dialog >> text=Estado de la conexión');
+      await page.waitForSelector('dialog >> text=Mis metas');
+      await captura(page, 'ajustes-simple');
+      assert.ok(!(await page.innerText('dialog')).includes('versión 2'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
+      await page.click('dialog summary:has-text("Opciones avanzadas")');
       const t = await page.innerText('dialog');
       assert.ok(t.includes('versión 2 (al día)') && t.includes('…'), t);
       await page.click('dialog button:has-text("Copiar código del servicio")');
@@ -229,7 +232,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('el botón «Ver cómo» lleva a los pasos, con el estado «desactualizado»', async () => {
       await page.click('.banda button:has-text("Ver cómo")');
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('versión 1 (desactualizado)') && t.includes('Nueva versión'), t);
+      assert.ok(t.includes('versión 1 (desactualizado)') && t.includes('Nueva versión'), 'con servicio viejo la sección se abre sola: ' + t);
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
