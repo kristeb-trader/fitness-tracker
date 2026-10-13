@@ -279,7 +279,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog button:has-text("Guardar medidas")');
       await page.waitForFunction(() => /7,5\s*h/.test(document.querySelector('.dos').innerText));
       assert.ok((await page.innerText('.dos')).includes('71,6'), 'no borra el peso');
-      await page.click('.dos button[aria-label="Registrar peso y cintura"]');
+      await page.click('.dos button.card.tocable >> nth=0');
       await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'f-peso_kg');
       await page.keyboard.press('Escape');
     });
@@ -312,6 +312,92 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(llamadas[llamadas.length - 1].url, URL_B, 'las peticiones van a la dirección nueva');
     });
 
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Progreso: gráficas y medición trimestral');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    const hace = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoLocal(d); };
+    let semilla = 3; const azar = () => (semilla = (semilla * 16807) % 2147483647) / 2147483647;
+    for (let n = 0; n < 40; n++) {
+      if (n % 9 === 4) continue; // días sin registrar
+      const f = hace(n);
+      s.hojas.comidas.filas.push(['c' + n, f, '13:00', 'almuerzo', 'Comida ' + n, n === 3 ? 3400 : 1900 + Math.round(azar() * 500), n % 5 === 0 ? 110 : 135 + Math.round(azar() * 20), 200, 70, true, '']);
+      s.hojas.medidas.filas.push([f, '', '', +(6 + azar() * 2.4).toFixed(1), '']);
+      if (n % 3 === 0) s.hojas.ejercicio.filas.push(['e' + n, f, n % 2 ? 'bici' : 'gym', 45, 300, 'manual', '', '', '']);
+      if (n % 3 === 0 && n % 2 === 0) {
+        for (let k = 1; k <= 3; k++) s.hojas.series_gym.filas.push(['g' + n + k, f, 'Pecho', 'Press banca', k, 60 + (40 - n) / 4, 8, '']);
+        s.hojas.series_gym.filas.push(['r' + n, f, 'Espalda', 'Remo', 1, 40, 10, '']);
+      }
+    }
+    // Mediciones trimestrales: hace 6 meses, hace 3 meses y hace 20 días (fuera de los días cargados, igual se ven)
+    s.hojas.medidas.filas.push([hace(185), 74.2, 89, '', '']);
+    s.hojas.medidas.filas.push([hace(95), 73.1, 87.5, '', '']);
+    s.hojas.medidas.filas.push([hace(20), 72.3, 86, '', '']);
+
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+
+    await prueba('Hoy: la tarjeta de Medición muestra la última y cuánto falta para la próxima', async () => {
+      const t = await page.innerText('.dos');
+      assert.ok(t.includes('Medición') && t.includes('72,3') && t.includes('Cintura 86 cm') && t.includes('Próxima en 70 días'), t);
+      await captura(page, 'hoy-medicion');
+    });
+    await prueba('Progreso abre en 30 días con el resumen de la semana', async () => {
+      await page.click('.nav [aria-label="Progreso"]');
+      await page.waitForSelector('.titulo:has-text("Progreso")');
+      assert.strictEqual(await page.innerText('.periodo button.on'), '30 días');
+      const sem = await page.innerText('.cuatro');
+      assert.ok(sem.includes('Calorías promedio') && sem.includes('Proteína en meta') && sem.includes('Sueño promedio') && sem.includes('Entrenamientos'), sem);
+      await captura(page, 'progreso');
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'progreso-completo.png'), fullPage: true });
+    });
+    await prueba('peso y cintura: las 3 mediciones trimestrales y el cambio desde la anterior', async () => {
+      const peso = await page.innerText('.graf:has(h3:text-is("Peso"))');
+      assert.ok(peso.includes('−0,8 kg') && peso.includes('72,3 kg'), peso);
+      assert.strictEqual(await page.locator('.graf:has(h3:text-is("Peso")) circle.hit').count(), 3);
+      const cint = await page.innerText('.graf:has(h3:text-is("Cintura"))');
+      assert.ok(cint.includes('−1,5 cm'), cint);
+    });
+    await prueba('calorías: una barra por día con comidas; al tocarla muestra el dato', async () => {
+      const g = page.locator('.graf:has(h3:text-is("Calorías por día"))');
+      const barras = await g.locator('rect.hit').count();
+      assert.ok(barras >= 25 && barras <= 30, String(barras));
+      await g.locator('rect.hit').last().click();
+      const dato = await g.locator('.dato').innerText();
+      assert.ok(/kcal · meta/.test(dato), dato);
+      assert.ok((await g.innerText()).includes('días dentro de la meta'));
+    });
+    await prueba('proteína y sueño con sus metas', async () => {
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Proteína por día"))')).includes('Franja verde: 130 a 160 g'));
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Sueño"))')).includes('promedio'));
+    });
+    await prueba('gym: elige el ejercicio y muestra cómo sube el peso', async () => {
+      const g = page.locator('.graf:has(h3:text-is("Gym: tu fuerza"))');
+      assert.strictEqual(await g.locator('.chips button.on').innerText(), 'Press banca');
+      assert.ok((await g.innerText()).includes('▲ subiendo'));
+      await g.locator('.chips button:has-text("Remo")').click();
+      await page.waitForFunction(() => document.querySelector('.chips button.on').textContent === 'Remo');
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Gym: tu fuerza"))')).includes('40 kg'));
+    });
+    await prueba('7 días muestra menos barras y no vuelve a pedir datos a Google', async () => {
+      await page.click('.periodo button:has-text("7 días")');
+      const n = await page.locator('.graf:has(h3:text-is("Calorías por día")) rect.hit').count();
+      assert.ok(n >= 5 && n <= 7, String(n));
+      await page.click('.periodo button:has-text("90 días")');
+      await page.waitForSelector('.periodo button.on:has-text("90 días")');
+    });
+    await prueba('volver a Hoy', async () => {
+      await page.click('.nav [aria-label="Hoy"]');
+      await page.waitForSelector('.hero');
+    });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
   }

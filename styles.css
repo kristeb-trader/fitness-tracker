@@ -147,8 +147,47 @@ button.card.tocable { border: 0; font: inherit; color: inherit; text-align: left
 button.card.tocable:active { transform: scale(.98); }
 .card .cab .mas { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--lime); color: var(--ink, #111); display: grid; place-items: center; font-size: 18px; font-weight: 800; line-height: 1; }
 .card .cab { gap: 8px; }
+.card .proxima { font-size: 12px; font-weight: 800; color: var(--lime-ink); }
+button.card.tocable.toca { background: var(--lime-soft); box-shadow: inset 0 0 0 2px var(--lime); }
 .card .cab .chip-ico + span { margin-right: auto; }
 
 /* Pegar: lo que no se guardará se ve apagado */
 .item.apagado { opacity: .55; }
 .resumen-pegar { font-weight: 700; color: var(--ink); margin: 8px 0 0; }
+
+/* Barra de abajo con 4 opciones: Hoy · Progreso · + · Ajustes */
+.nav.nav4 { grid-template-columns: 1fr 1fr 88px 2fr; }
+
+/* Pantalla Progreso */
+.periodo { display: grid; grid-template-columns: repeat(3, 1fr); background: #fff; border-radius: 16px; padding: 4px; gap: 4px; }
+.periodo button { border: 0; background: transparent; padding: 10px 0; border-radius: 12px; font-size: 14px; font-weight: 700; color: var(--sub); min-height: 44px; }
+.periodo button.on { background: var(--ink); color: #fff; }
+.cuatro { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.mini { background: #fff; border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mini .k { font-size: 12px; color: var(--sub); font-weight: 700; }
+.mini .v { font-size: 22px; font-weight: 800; letter-spacing: -.5px; }
+.mini .v small { font-size: 12px; color: var(--sub); font-weight: 600; letter-spacing: 0; }
+.mini .n { font-size: 12px; font-weight: 700; color: var(--sub); }
+.bien { color: #2E7D32 !important; }
+.ojo { color: #9A5B00 !important; }
+.graf { background: #fff; border-radius: 24px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.graf h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.graf .d { font-size: 12px; color: var(--sub); font-weight: 600; }
+.graf .grande { font-size: 20px; font-weight: 800; letter-spacing: -.4px; margin-top: 4px; }
+.graf .grande small { font-size: 12px; font-weight: 700; color: var(--sub); letter-spacing: 0; }
+.graf .dato { font-size: 12px; font-weight: 700; color: var(--sub); min-height: 18px; margin-top: 4px; }
+.graf .dato.on { color: var(--ink); }
+.graf-svg { display: block; overflow: visible; touch-action: pan-y; }
+.graf-svg text { font-family: inherit; font-size: 10px; fill: #5C6B60; font-weight: 600; }
+.graf-svg text.etq { font-size: 11px; font-weight: 800; fill: #14281E; }
+.graf-svg .hit { cursor: pointer; }
+.graf-svg rect.hit.sel { fill: rgba(20,40,30,.06); }
+.graf-svg circle.hit.sel { fill: rgba(20,40,30,.08); }
+.ley { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--sub); font-weight: 700; margin-top: 4px; }
+.ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.ley i.linea { height: 3px; border-radius: 2px; vertical-align: 3px; }
+.ley i.borde { box-shadow: inset 0 0 0 1px var(--lime); }
+.chips { display: flex; gap: 6px; margin: 6px 0 2px; flex-wrap: wrap; }
+.chips button { border: 0; font-size: 12px; font-weight: 700; padding: 8px 12px; border-radius: 999px; background: var(--lime-soft); color: var(--lime-ink); min-height: 36px; }
+.chips button.on { background: var(--ink); color: #fff; }
+.subtitulo { margin: 14px 0 2px; font-size: 14px; font-weight: 800; }

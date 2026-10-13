@@ -2,7 +2,7 @@
 
 Una app personal para el celular. Tus datos viven en **una hoja de Google** tuya, y la app se publica gratis en **GitHub Pages**. No necesitas pagar nada ni instalar programas.
 
-> Fase 1: registrar y ver el resumen del día. Las gráficas de progreso vienen en la siguiente fase.
+> Fase 2: además del resumen del día, la pestaña **Progreso** muestra tus gráficas.
 
 ## Cómo funciona (en simple)
 
@@ -119,11 +119,12 @@ Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas a
 
 ## Cómo se usa
 
-- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas, ejercicio y series de gym del día. Con las flechas y la tira de días ves otros días al instante, porque la app trae los últimos 60 días de una vez. Al abrir la app ves al instante lo último que se trajo (queda guardado solo en tu celular) y, por detrás, se actualiza con Google: una barrita verde arriba indica que está actualizando. Al volver a la app después de un rato, se actualiza sola.
+- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, tu última medición de peso y cintura (con los días que faltan para la próxima), sueño, comidas, ejercicio y series de gym del día. Con las flechas y la tira de días ves otros días al instante, porque la app trae los últimos 100 días de una vez. Al abrir la app ves al instante lo último que se trajo (queda guardado solo en tu celular) y, por detrás, se actualiza con Google: una barrita verde arriba indica que está actualizando. Al volver a la app después de un rato, se actualiza sola.
 - **Botón +:** abre **Pegar** (registrar con ayuda de tu chat de Claude), los formularios de comida, medidas (peso, cintura, sueño) y ejercicio, y el **Chat** si activaste el Paso 4c. En Claude puedes escribir cosas como «desayuno 3 huevos y 2 tostadas», «peso 72,4, cintura 85, dormí 7 horas», «caminata 40 minutos» o «press banca 4 series de 8 con 60 kg».
 - **Tocar una comida, un ejercicio o un ejercicio de gym:** ver el detalle o borrarlo (en gym, serie por serie).
 - **Pegar:** si Claude no pone fecha, se guarda en el día que tienes abierto. Acepta fechas como `9/10/2026` y avisa si una fecha es futura. Al guardar, la app te lleva al día de lo guardado. Puedes pegar hasta 150 registros de una vez (por ejemplo, días anteriores): ves el avance «Guardando 12 de 40…», y lo que ya estaba guardado se marca y no se repite.
-- **Medidas:** un registro por día. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes.
+- **Medidas:** el **sueño** se registra cada día. El **peso y la cintura** son una **medición trimestral** (cada 90 días): la tarjeta «Medición» de Hoy se pone verde cuando ya toca. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes.
+- **Progreso:** elige 7, 30 (por defecto) o 90 días. Ves el resumen de la semana (calorías, días con proteína en meta, sueño y entrenamientos), tus mediciones trimestrales de peso y cintura, y gráficas por día de calorías contra tu meta, proteína contra la franja de 130–160 g, la fuerza en cada ejercicio de gym y el sueño. Toca una barra o un punto para ver el dato exacto.
 - **Meta de calorías del día** = calorías base + ejercicio del día − déficit promedio. Las cifras se cambian en la pestaña `metas` de tu hoja.
 
 ## Qué hay en este repositorio
