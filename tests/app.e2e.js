@@ -181,6 +181,37 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.nav [aria-label="Hoy"]');
       await page.waitForSelector('.plato .desc:has-text("Salmón con papas")');
     });
+    await prueba('Pegar 40 registros anteriores: botón verde arriba, muestra avance y no repite si pegas lo mismo otra vez', async () => {
+      const dia = (n) => new Date(Date.parse(hoy + 'T00:00:00Z') - n * 86400000).toISOString().slice(0, 10);
+      const lote = [];
+      for (let i = 1; i <= 20; i++) {
+        lote.push({ tabla: 'comidas', fecha: dia(i + 1), tipo_comida: 'almuerzo', descripcion: 'Lote ' + i, kcal: 500 + i, proteina_g: 30, carbos_g: 50, grasa_g: 15 });
+        lote.push({ tabla: 'medidas', fecha: dia(i + 1), peso_kg: 72 + i / 10, horas_sueno: 7 });
+      }
+      const antes = s.hojas.comidas.filas.length;
+      const texto = JSON.stringify(lote, null, 2);
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', texto);
+      await page.click('dialog button:has-text("Revisar")');
+      const btn = page.locator('dialog button:has-text("Guardar 40 registros")');
+      await btn.waitFor();
+      assert.ok((await btn.getAttribute('class')).includes('lima'), 'el botón Guardar es verde');
+      assert.ok(await btn.evaluate((b) => b.getBoundingClientRect().top < document.querySelector('dialog .lista').getBoundingClientRect().top), 'Guardar va antes de la lista');
+      control.retraso = 150;
+      await btn.click();
+      await page.waitForSelector('dialog button:has-text("Guardando")');
+      await page.waitForSelector('text=40 registros guardados', { timeout: 20000 });
+      control.retraso = 0;
+      assert.strictEqual(s.hojas.comidas.filas.length - antes, 20);
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', texto);
+      await page.click('dialog button:has-text("Revisar")');
+      await page.waitForSelector('dialog .resumen-pegar:has-text("20 ya estaban guardados")');
+      assert.ok((await page.innerText('dialog .resumen-pegar')).startsWith('20 listos'), 'las medidas solo se actualizan');
+      await page.keyboard.press('Escape');
+      await page.click('.nav [aria-label="Hoy"]');
+      await page.waitForSelector('.plato .desc:has-text("Salmón con papas")');
+    });
     await prueba('formularios: comida, medidas y ejercicio', async () => {
       await page.click('.fab');
       await page.click('dialog [role=tab]:has-text("Comida")');

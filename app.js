@@ -719,7 +719,7 @@
     }
     if (datos && !Array.isArray(datos)) datos = [datos];
     if (!datos || !datos.length) throw new Error("No encontré datos. Pega exactamente el bloque que te dio Claude.");
-    if (datos.length > 50) throw new Error("Son demasiados registros de una vez (máximo 50).");
+    if (datos.length > 150) throw new Error("Son demasiados registros de una vez (máximo 150). Pégalos en partes.");
     return datos;
   }
 
@@ -757,6 +757,20 @@
     return d;
   }
 
+  // Para no guardar dos veces lo mismo (por ejemplo, si pegas el mismo bloque otra vez)
+  function huellaRegistro(r) {
+    var t = function (v) { return vacio(v) ? "" : String(v).trim().toLowerCase(); };
+    var num = function (v) { return vacio(v) || isNaN(Number(v)) ? "" : String(Number(v)); };
+    if (r.tabla === "comidas") return ["comidas", r.fecha, t(r.tipo_comida), t(r.descripcion), num(r.kcal)].join("|");
+    if (r.tabla === "ejercicio") return ["ejercicio", r.fecha, t(r.tipo), num(r.duracion_min), num(r.kcal)].join("|");
+    if (r.tabla === "series_gym") return ["series_gym", r.fecha, t(r.ejercicio), num(r.numero_serie), num(r.peso_kg), num(r.repeticiones)].join("|");
+    return ""; // medidas: una por día, guardar otra vez solo actualiza
+  }
+  function yaGuardado(r, clave) {
+    var T = estado.tablas;
+    if (!T || !T[r.tabla] || !estado.desde || r.fecha < estado.desde) return false;
+    return T[r.tabla].some(function (x) { return huellaRegistro(Object.assign({ tabla: r.tabla }, x, { fecha: normFecha(x.fecha) })) === clave; });
+  }
   function enviarRegistro(r) {
     var fila = {};
     Object.keys(r).forEach(function (k) { if (k !== "tabla") fila[k] = r[k]; });
@@ -767,7 +781,8 @@
     var area = h("textarea", { rows: 6, "aria-label": "Datos de Claude", placeholder: "Pega aquí el bloque con corchetes [ … ] que te dio Claude" });
     var vista = h("div", { class: "lista" });
     var revisar = h("button", { class: "btn lima", type: "button", text: "Revisar" });
-    var guardar = h("button", { class: "btn", type: "button", text: "Guardar", hidden: true });
+    var guardar = h("button", { class: "btn lima", type: "button", text: "Guardar", hidden: true });
+    var resumen = h("p", { class: "ayuda resumen-pegar", hidden: true });
     var copiar = h("button", { class: "btn sec", type: "button", text: "Copiar instrucciones para Claude" });
     var respaldo = h("textarea", { rows: 6, readonly: true, hidden: true, "aria-label": "Instrucciones para Claude" });
     var validos = [];
@@ -776,30 +791,51 @@
       copiarTexto(instruccionesClaude(), respaldo, "Instrucciones copiadas. Pégalas en un chat de Claude.");
     });
 
+    function listo(hayValidos) {
+      guardar.hidden = !hayValidos;
+      revisar.className = hayValidos ? "btn sec" : "btn lima";
+    }
+
     revisar.addEventListener("click", function () {
-      vista.textContent = ""; guardar.hidden = true; validos = [];
+      vista.textContent = ""; validos = []; listo(false); resumen.hidden = true;
       var lista;
       try { lista = leerRegistros(area.value); } catch (e) { return aviso(e.message, true); }
+      var repetidos = 0, malos = 0, vistos = {};
       lista.map(normalizarRegistro).forEach(function (r) {
         var d = describirRegistro(r);
-        if (d.ok) validos.push(r);
-        vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: (d.ok ? "" : "No se guardará: ") + d.texto }))));
+        var texto = d.texto;
+        if (d.ok) {
+          var clave = huellaRegistro(r);
+          if (clave && (vistos[clave] || yaGuardado(r, clave))) { d.ok = false; repetidos++; texto = "Ya está guardado: " + d.texto; }
+          else { if (clave) vistos[clave] = true; validos.push(r); }
+        } else { malos++; texto = "No se guardará: " + d.texto; }
+        vista.appendChild(h("div", { class: "item" + (d.ok ? "" : " apagado") }, h("div", { class: "t" }, h("b", { text: texto }))));
       });
-      if (validos.length) { guardar.textContent = "Guardar " + validos.length + (validos.length === 1 ? " registro" : " registros"); guardar.hidden = false; }
-      else aviso("Ningún registro es válido.", true);
+      var partes = [validos.length + (validos.length === 1 ? " listo para guardar" : " listos para guardar")];
+      if (repetidos) partes.push(repetidos + (repetidos === 1 ? " ya estaba guardado" : " ya estaban guardados"));
+      if (malos) partes.push(malos + " con problemas");
+      resumen.textContent = partes.join(" · ") + ".";
+      resumen.hidden = false;
+      if (validos.length) { guardar.textContent = "Guardar " + validos.length + (validos.length === 1 ? " registro" : " registros"); listo(true); }
+      else aviso(repetidos ? "Todo eso ya estaba guardado." : "Ningún registro es válido.", true);
     });
 
     guardar.addEventListener("click", function () {
       guardar.disabled = true; revisar.disabled = true;
-      var res = { ok: 0, fallos: [], fechas: [] };
-      validos.reduce(function (cadena, r) {
-        return cadena.then(function () {
-          return enviarRegistro(r).then(function () { res.ok++; res.fechas.push(r.fecha); }, function (e) {
-            if (e && e.noAutorizado) throw e;
-            res.fallos.push(describirRegistro(r).texto + " → " + (e && e.message ? e.message : "error"));
-          });
-        });
-      }, Promise.resolve()).then(function () {
+      var res = { ok: 0, fallos: [], fechas: [] }, hechos = 0, total = validos.length;
+      var pendientes = validos.slice(), parar = null;
+      guardar.textContent = "Guardando 0 de " + total + "…";
+      // Varios a la vez (3) para que una lista larga no tarde tanto
+      function trabajador() {
+        if (parar || !pendientes.length) return Promise.resolve();
+        var r = pendientes.shift();
+        return enviarRegistro(r).then(function () { res.ok++; res.fechas.push(r.fecha); }, function (e) {
+          if (e && e.noAutorizado) { parar = e; return; }
+          res.fallos.push(describirRegistro(r).texto + " → " + (e && e.message ? e.message : "error"));
+        }).then(function () { hechos++; guardar.textContent = "Guardando " + hechos + " de " + total + "…"; return trabajador(); });
+      }
+      Promise.all([trabajador(), trabajador(), trabajador()]).then(function () {
+        if (parar) throw parar;
         guardar.disabled = false; revisar.disabled = false;
         if (res.ok) {
           // Muestra el día de lo que se guardó
@@ -809,15 +845,15 @@
         }
         if (!res.fallos.length) { cerrarHoja(); aviso(res.ok + (res.ok === 1 ? " registro guardado" : " registros guardados")); return; }
         aviso("Guardé " + res.ok + " y fallaron " + res.fallos.length + ".", true);
-        vista.textContent = "";
+        vista.textContent = ""; resumen.hidden = true;
         res.fallos.forEach(function (f) { vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: "No se guardó: " + f })))); });
-        guardar.hidden = true; area.value = "";
+        listo(false); area.value = "";
       }).catch(function (e) { guardar.disabled = false; revisar.disabled = false; manejarError(e); });
     });
 
     return h("div", { class: "chat" },
       h("p", { class: "ayuda", text: "1) Copia las instrucciones y pégalas una vez en un chat de Claude. 2) Cuéntale lo que comiste, tu peso, etc. 3) Copia el bloque de datos que te devuelva y pégalo aquí. Se guarda en el día que tienes abierto: " + corta(estado.fecha) + "." }),
-      copiar, respaldo, area, revisar, vista, guardar,
+      copiar, respaldo, area, revisar, resumen, guardar, vista,
       h("p", { class: "ayuda", text: "Usa tu plan de Claude, no la API. Revisa la lista antes de guardar." }));
   }
 

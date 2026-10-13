@@ -148,3 +148,7 @@ button.card.tocable:active { transform: scale(.98); }
 .card .cab .mas { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--lime); color: var(--ink, #111); display: grid; place-items: center; font-size: 18px; font-weight: 800; line-height: 1; }
 .card .cab { gap: 8px; }
 .card .cab .chip-ico + span { margin-right: auto; }
+
+/* Pegar: lo que no se guardará se ve apagado */
+.item.apagado { opacity: .55; }
+.resumen-pegar { font-weight: 700; color: var(--ink); margin: 8px 0 0; }
