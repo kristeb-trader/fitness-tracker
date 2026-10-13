@@ -1,10 +1,11 @@
 // Guarda solo los archivos de la app para que abra al instante. Tus datos nunca se guardan aquí.
 // Abre con lo guardado en el teléfono y, por detrás, descarga la versión nueva para la próxima vez.
-const CACHE = "seguimiento-v9";
+const CACHE = "seguimiento-v10";
 const ARCHIVOS = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
+  // cache: "reload" = baja la versión nueva, no una copia vieja guardada por el navegador
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {

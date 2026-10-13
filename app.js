@@ -451,6 +451,8 @@
         h("span", { text: "Tiene una versión anterior y por eso algunos registros pueden no verse. Toma 2 minutos." }),
         h("button", { class: "btn lima", text: "Ver cómo", onclick: abrirAjustes })));
     }
+    var rep = bandaRepetidos();
+    if (rep) raiz.appendChild(rep);
     raiz.appendChild(h("div", { class: "top" },
       h("div", { class: "quien" },
         h("div", { class: "avatar", style: "color:#2E5A12" }, icono("user", 24)),
@@ -691,6 +693,8 @@
       return;
     }
 
+    var repe = bandaRepetidos();
+    if (repe) raiz.appendChild(repe);
     var m = estado.metas || {};
     var base = numMeta(m.kcal_base, 2500), protMin = numMeta(m.proteina_min_g, 130), protMax = numMeta(m.proteina_max_g, 160);
     var defMin = numMeta(m.deficit_min_kcal, 200), defMax = numMeta(m.deficit_max_kcal, 300);
@@ -1459,6 +1463,79 @@
       }))));
   }
 
+  // ---------- Registros repetidos ----------
+  /** Registros iguales (mismo día, tipo, descripción y cifras). De cada grupo se deja el primero que se guardó. */
+  function buscarRepetidos() {
+    var res = { grupos: [], sobran: [], kcal: 0 };
+    if (!estado.tablas) return res;
+    ["comidas", "ejercicio", "series_gym"].forEach(function (tabla) {
+      var porClave = {};
+      estado.tablas[tabla].forEach(function (x) {
+        if (!x.id || !x.fecha) return;
+        var k = huellaRegistro(Object.assign({}, x, { tabla: tabla }));
+        (porClave[k] = porClave[k] || []).push(x);
+      });
+      Object.keys(porClave).forEach(function (k) {
+        var l = porClave[k];
+        if (l.length < 2) return;
+        l.sort(function (x, y) { return String(x.creado_en || "") < String(y.creado_en || "") ? -1 : 1; });
+        res.grupos.push({ tabla: tabla, registro: l[0], veces: l.length });
+        l.slice(1).forEach(function (x) { res.sobran.push({ tabla: tabla, id: x.id }); if (tabla === "comidas") res.kcal += Number(x.kcal) || 0; });
+      });
+    });
+    res.grupos.sort(function (x, y) { return x.registro.fecha < y.registro.fecha ? -1 : 1; });
+    return res;
+  }
+  function textoRepetido(g) {
+    var x = g.registro;
+    if (g.tabla === "comidas") return corta(x.fecha) + " · " + cap(x.tipo_comida || "") + ": " + x.descripcion + " · " + fmt(x.kcal) + " kcal";
+    if (g.tabla === "ejercicio") return corta(x.fecha) + " · Ejercicio: " + cap(x.tipo || "") + (x.duracion_min ? " · " + fmt(x.duracion_min) + " min" : "") + (vacio(x.kcal) ? "" : " · " + fmt(x.kcal) + " kcal");
+    return corta(x.fecha) + " · Gym: " + x.ejercicio + " · serie " + fmt(x.numero_serie) + ": " + fmt(x.peso_kg, 1) + " kg × " + fmt(x.repeticiones);
+  }
+  /** Aviso amarillo cuando hay repetidos (en Hoy y en Progreso). */
+  function bandaRepetidos() {
+    var r = buscarRepetidos();
+    if (!r.sobran.length) return null;
+    return h("div", { class: "banda" },
+      h("b", { text: "Hay " + plural(r.sobran.length, "registro repetido", "registros repetidos") }),
+      h("span", { text: r.kcal ? "Suman " + fmt(r.kcal) + " kcal de más en tus totales." : "Hacen que tus totales salgan más altos." }),
+      h("button", { class: "btn lima", text: "Revisar", onclick: abrirRepetidos }));
+  }
+  function abrirRepetidos() {
+    var r = buscarRepetidos();
+    var dias = estado.desde ? Math.round((deISO(hoy) - deISO(estado.desde)) / 86400000) : DIAS_CARGADOS;
+    if (!r.sobran.length) {
+      abrirHoja("Registros repetidos", h("div", {}, h("p", { class: "ayuda", text: "✓ No encontré registros repetidos en los últimos " + dias + " días." })));
+      return;
+    }
+    var btn = h("button", { class: "btn peligro", text: "Borrar " + plural(r.sobran.length, "repetido", "repetidos") });
+    btn.addEventListener("click", function () {
+      if (!confirm("¿Borrar " + plural(r.sobran.length, "registro repetido", "registros repetidos") + "? Se deja uno de cada uno.")) return;
+      btn.disabled = true;
+      var pendientes = r.sobran.slice(), hechos = 0, fallos = 0, parar = null, total = pendientes.length;
+      btn.textContent = "Borrando 0 de " + total + "…";
+      function trabajador() {
+        if (parar || !pendientes.length) return Promise.resolve();
+        var x = pendientes.shift();
+        return api("borrar", { tabla: x.tabla, id: x.id }).catch(function (e) { if (e && e.noAutorizado) parar = e; else fallos++; })
+          .then(function () { hechos++; btn.textContent = "Borrando " + hechos + " de " + total + "…"; return trabajador(); });
+      }
+      Promise.all([trabajador(), trabajador(), trabajador()]).then(function () {
+        if (parar) throw parar;
+        cerrarHoja();
+        aviso(fallos ? "Borré " + (total - fallos) + "; " + fallos + " no se pudieron borrar. Inténtalo otra vez." : plural(total, "repetido borrado", "repetidos borrados"), !!fallos);
+        cargar();
+      }).catch(function (e) { btn.disabled = false; manejarError(e); });
+    });
+    abrirHoja("Registros repetidos", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
+      h("p", { class: "ayuda", text: "Encontré " + plural(r.sobran.length, "registro", "registros") + " de más" + (r.kcal ? " (" + fmt(r.kcal) + " kcal)" : "") +
+        ": la misma comida, ejercicio o serie guardada varias veces el mismo día. Al borrar se deja uno de cada uno; no se toca nada más." }),
+      btn,
+      h("div", { class: "lista" }, r.grupos.map(function (g) {
+        return h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: textoRepetido(g) }), h("span", { text: "Guardado " + g.veces + " veces · se borran " + (g.veces - 1) })));
+      }))));
+  }
+
   // ---------- Ajustes ----------
   function abrirDireccion() {
     var actual = urlServicio();
@@ -1521,6 +1598,7 @@
       lineas(pares),
       h("p", { class: "ayuda", text: "Se cambian en la pestaña «metas» de tu hoja de Google." }),
       h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { if (estado.version < 2) estado.version = null; cerrarHoja(); cargar(); } }),
+      estado.tablas ? h("button", { class: "btn sec", text: "Buscar registros repetidos", onclick: function () { cerrarHoja(); abrirRepetidos(); } }) : null,
       h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); olvidarDatos(); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
       avanzado
     ));
@@ -1552,6 +1630,16 @@
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function () { /* la app funciona igual */ });
+    // Cuando llega una versión nueva, se usa enseguida (sin esperar a la próxima vez que abras la app)
+    var habiaVersion = !!navigator.serviceWorker.controller, recargando = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!habiaVersion || recargando) return;
+      recargando = true;
+      if (hojaActual) {
+        aviso("Hay una versión nueva de la app: se usará al cerrar esta ventana.");
+        hojaActual.addEventListener("close", function () { location.reload(); });
+      } else location.reload();
+    });
   }
   inicio();
 })();

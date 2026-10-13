@@ -336,6 +336,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       }
     }
     // Mediciones trimestrales: hace 6 meses, hace 3 meses y hace 20 días (fuera de los días cargados, igual se ven)
+    // Repetidos: la misma comida 3 veces y el mismo ejercicio 2 veces (como al pegar el mismo bloque varias veces)
+    const comida1 = s.hojas.comidas.filas.find((r) => r[0] === 'c1');
+    s.hojas.comidas.filas.push(['c1-bis', ...comida1.slice(1, 10), '2099-01-01T00:00:00Z']);
+    s.hojas.comidas.filas.push(['c1-tris', ...comida1.slice(1, 10), '2099-01-02T00:00:00Z']);
+    const ejer3 = s.hojas.ejercicio.filas.find((r) => r[0] === 'e3');
+    s.hojas.ejercicio.filas.push(['e3-bis', ...ejer3.slice(1, 8), '2099-01-01T00:00:00Z']);
     s.hojas.medidas.filas.push([hace(185), 74.2, 89, '', '']);
     s.hojas.medidas.filas.push([hace(95), 73.1, 87.5, '', '']);
     s.hojas.medidas.filas.push([hace(20), 72.3, 86, '', '']);
@@ -349,6 +355,27 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const t = await page.innerText('.dos');
       assert.ok(t.includes('Medición') && t.includes('72,3') && t.includes('Cintura 86 cm') && t.includes('Próxima en 70 días'), t);
       await captura(page, 'hoy-medicion');
+    });
+    await prueba('repetidos: avisa en Hoy, los muestra y al confirmar deja uno de cada uno', async () => {
+      await page.waitForSelector('.banda:has-text("Hay 3 registros repetidos")');
+      assert.ok((await page.innerText('.banda')).includes('Suman ' + (comida1[5] * 2).toLocaleString('de-DE') + ' kcal de más'));
+      await page.click('.banda button:has-text("Revisar")');
+      await page.waitForSelector('dialog >> text=Guardado 3 veces · se borran 2');
+      await page.waitForSelector('dialog >> text=Guardado 2 veces · se borran 1');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Borrar 3 repetidos")');
+      await page.waitForSelector('text=3 repetidos borrados', { timeout: 15000 });
+      const ids = s.hojas.comidas.filas.map((r) => r[0]);
+      assert.ok(ids.includes('c1') && !ids.includes('c1-bis') && !ids.includes('c1-tris'), 'deja el original');
+      const idsE = s.hojas.ejercicio.filas.map((r) => r[0]);
+      assert.ok(idsE.includes('e3') && !idsE.includes('e3-bis'));
+      await page.waitForFunction(() => !document.querySelector('.banda'));
+    });
+    await prueba('Ajustes: «Buscar registros repetidos» dice que ya no hay', async () => {
+      await page.click('.nav [aria-label="Ajustes"]');
+      await page.click('dialog button:has-text("Buscar registros repetidos")');
+      await page.waitForSelector('dialog >> text=No encontré registros repetidos');
+      await page.keyboard.press('Escape');
     });
     await prueba('Progreso abre en 30 días con el consolidado: balance = consumido − gastado', async () => {
       await page.click('.nav [aria-label="Progreso"]');
