@@ -51,6 +51,7 @@ async function abrir(configJs, servicios) {
     const cuerpo = route.request().postData() || '{}';
     llamadas.push({ url, accion: JSON.parse(cuerpo).accion });
     if (control.retraso) await new Promise((r) => setTimeout(r, control.retraso));
+    if (control.rechazar && cuerpo.includes(control.rechazar)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'tipo_comida no es válido (usa: desayuno, almuerzo, cena, snack)' }) });
     if (control.fallo === 'red') return route.abort('failed');
     if (control.fallo === 'html') return route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Sorry, unable to open the file at this time.</html>' });
     if (!servicio) return route.fulfill({ status: 404, contentType: 'text/html', body: 'no existe' });
@@ -211,6 +212,44 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.keyboard.press('Escape');
       await page.click('.nav [aria-label="Hoy"]');
       await page.waitForSelector('.plato .desc:has-text("Salmón con papas")');
+    });
+    await prueba('Pegar: traduce «merienda», «correr» y «pesas»; avisa antes de guardar lo que Google rechazaría', async () => {
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', JSON.stringify([
+        { tabla: 'comidas', tipo_comida: 'Merienda', descripcion: 'Fruta', kcal: '120 kcal', proteina_g: 1 },
+        { tabla: 'ejercicio', tipo: 'Correr', duracion_min: 30, kcal: 300 },
+        { tabla: 'gym', ejercicio: 'Sentadilla', numero_serie: 1, peso_kg: 80, repeticiones: 5 },
+        { tabla: 'medidas', horas_sueno: 30 },
+        { tabla: 'comidas', tipo_comida: 'cena', descripcion: 'Exagerada', kcal: 20000 }
+      ]));
+      await page.click('dialog button:has-text("Revisar")');
+      await page.waitForSelector('dialog button:has-text("Guardar 3 registros")');
+      const v = await page.innerText('dialog .lista');
+      assert.ok(v.includes('Snack: Fruta · 120 kcal') && v.includes('Ejercicio: Caminata') && v.includes('Gym: Sentadilla'), v);
+      assert.ok(v.includes('horas de sueño mayor que 24') && v.includes('calorías mayor que 10.000'), v);
+      await page.click('dialog button:has-text("Guardar 3 registros")');
+      await page.waitForSelector('text=3 registros guardados');
+      const ej = s.hojas.ejercicio.filas[s.hojas.ejercicio.filas.length - 1];
+      assert.ok(ej.includes('caminata') && ej.includes('Correr'), String(ej));
+    });
+    await prueba('Pegar: si Google rechaza alguno, lo explica y lo deja en el cuadro para reintentar', async () => {
+      control.rechazar = 'Rechazada';
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', JSON.stringify([
+        { tabla: 'comidas', tipo_comida: 'cena', descripcion: 'Buena', kcal: 400 },
+        { tabla: 'comidas', tipo_comida: 'cena', descripcion: 'Rechazada', kcal: 400 }
+      ]));
+      await page.click('dialog button:has-text("Revisar")');
+      await page.click('dialog button:has-text("Guardar 2 registros")');
+      await page.waitForSelector('text=Guardé 1 y fallaron 1.');
+      const v = await page.innerText('dialog .lista');
+      assert.ok(v.includes('No se guardó: Cena: Rechazada') && v.includes('tipo de comida no es válido'), v);
+      const caja = await page.inputValue('dialog textarea[aria-label="Datos de Claude"]');
+      assert.ok(caja.includes('Rechazada') && !caja.includes('Buena'), caja);
+      control.rechazar = null;
+      await page.click('dialog button:has-text("Revisar")');
+      await page.click('dialog button:has-text("Guardar 1 registro")');
+      await page.waitForSelector('text=1 registro guardado');
     });
     await prueba('formularios: comida, medidas y ejercicio', async () => {
       await page.click('.fab');

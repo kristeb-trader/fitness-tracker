@@ -156,6 +156,8 @@
       if (!j.ok) {
         var e = new Error(j.error || "Error");
         e.noAutorizado = j.error === "No autorizado";
+        // Error por el contenido del dato (no se arregla reintentando)
+        e.datos = /no es válido|es mayor que|es menor que|debe ser|^Falta |inválida/.test(e.message);
         throw e;
       }
       return j;
@@ -705,6 +707,41 @@
 
   var ALIAS_TABLAS = { comidas: "comidas", comida: "comidas", medidas: "medidas", medida: "medidas", ejercicio: "ejercicio", ejercicios: "ejercicio",
     series_gym: "series_gym", serie_gym: "series_gym", series: "series_gym", serie: "series_gym", gym: "series_gym" };
+  // Palabras que Claude a veces usa y que el servicio no acepta: se traducen a las que sí
+  var ALIAS_COMIDA = { desayuno: "desayuno", almuerzo: "almuerzo", comida: "almuerzo", brunch: "almuerzo", lunch: "almuerzo", cena: "cena", dinner: "cena",
+    snack: "snack", snacks: "snack", merienda: "snack", "media mañana": "snack", "media manana": "snack", "media tarde": "snack", onces: "snack", once: "snack",
+    "colación": "snack", colacion: "snack", tentempié: "snack", "pre-entreno": "snack", preentreno: "snack", "pre entreno": "snack",
+    "post-entreno": "snack", postentreno: "snack", "post entreno": "snack", batido: "snack", "suplemento": "snack", "refrigerio": "snack", "algo": "snack" };
+  var ALIAS_EJERCICIO = { gym: "gym", gimnasio: "gym", pesas: "gym", fuerza: "gym", "entrenamiento de fuerza": "gym", crossfit: "gym", funcional: "gym",
+    bici: "bici", bicicleta: "bici", ciclismo: "bici", spinning: "bici", "bici estática": "bici", "bici estatica": "bici", mtb: "bici", ruta: "bici",
+    caminata: "caminata", caminar: "caminata", "caminata rápida": "caminata", senderismo: "caminata", trote: "caminata", trotar: "caminata", correr: "caminata", carrera: "caminata", running: "caminata" };
+  var RANGOS = {
+    comidas: { kcal: [0, 10000], proteina_g: [0, 1000], carbos_g: [0, 1500], grasa_g: [0, 1000] },
+    ejercicio: { duracion_min: [1, 1440], kcal: [0, 10000] },
+    series_gym: { numero_serie: [1, 100, true], peso_kg: [0, 1000], repeticiones: [1, 1000, true] },
+    medidas: { peso_kg: [20, 400], cintura_cm: [20, 300], horas_sueno: [0, 24] }
+  };
+  var NOMBRES = { kcal: "calorías", proteina_g: "proteína", carbos_g: "carbos", grasa_g: "grasa", duracion_min: "duración", numero_serie: "número de serie",
+    peso_kg: "peso", repeticiones: "repeticiones", cintura_cm: "cintura", horas_sueno: "horas de sueño",
+    tipo_comida: "tipo de comida", tipo: "tipo de ejercicio", fuente: "fuente", descripcion: "descripción", rutina: "rutina", ejercicio: "ejercicio", fecha: "fecha" };
+  function aNumero(v) { return typeof v === "number" ? v : Number(String(v).replace(",", ".").replace(/[^\d.\-]/g, "")); }
+  /** Lo mismo que revisa el servicio de Google, para avisar antes de guardar. */
+  function problemaDatos(r) {
+    var rg = RANGOS[r.tabla] || {};
+    for (var k in rg) {
+      if (vacio(r[k])) continue;
+      var v = aNumero(r[k]);
+      if (!isFinite(v)) return NOMBRES[k] + " no es un número";
+      if (v < rg[k][0]) return NOMBRES[k] + " menor que " + rg[k][0];
+      if (v > rg[k][1]) return NOMBRES[k] + " mayor que " + fmt(rg[k][1]);
+      if (rg[k][2] && Math.floor(v) !== v) return NOMBRES[k] + " debe ser un número entero";
+    }
+    if (r.tabla === "comidas" && ["desayuno", "almuerzo", "cena", "snack"].indexOf(r.tipo_comida) < 0) return "tipo de comida «" + r.tipo_comida + "» no válido";
+    if (r.tabla === "ejercicio" && ["gym", "bici", "caminata"].indexOf(r.tipo) < 0) return "tipo de ejercicio «" + r.tipo + "» no válido";
+    if (r.tabla === "series_gym" && vacio(r.repeticiones)) return "faltan las repeticiones";
+    if (r.tabla === "series_gym" && vacio(r.peso_kg)) return "falta el peso";
+    return "";
+  }
 
   function leerRegistros(texto) {
     var t = String(texto || "").replace(/```[a-zA-Z]*/g, "").trim();
@@ -730,17 +767,24 @@
     Object.keys(r).forEach(function (k) { o[String(k).trim()] = typeof r[k] === "string" ? r[k].trim() : r[k]; });
     o.tabla = ALIAS_TABLAS[String(o.tabla || "").toLowerCase()] || "";
     o.fecha = vacio(o.fecha) ? estado.fecha : normFecha(o.fecha);
-    if (!vacio(o.hora)) o.hora = normHora(o.hora);
-    if (o.tipo_comida) o.tipo_comida = String(o.tipo_comida).toLowerCase();
-    if (o.tipo) o.tipo = String(o.tipo).toLowerCase();
-    if (o.fuente) o.fuente = String(o.fuente).toLowerCase();
+    if (!vacio(o.hora)) { o.hora = normHora(o.hora); if (!/^\d{2}:\d{2}$/.test(o.hora)) delete o.hora; }
+    if (o.tipo_comida) { var tc = String(o.tipo_comida).toLowerCase(); o.tipo_comida = ALIAS_COMIDA[tc] || tc; }
+    if (o.tipo) {
+      var te = String(o.tipo).toLowerCase();
+      if (o.tabla === "ejercicio" && ALIAS_EJERCICIO[te] && ALIAS_EJERCICIO[te] !== te && vacio(o.notas)) o.notas = cap(te);
+      o.tipo = ALIAS_EJERCICIO[te] || te;
+    }
+    if (o.fuente) { o.fuente = String(o.fuente).toLowerCase(); if (["strava", "manual", "estimado"].indexOf(o.fuente) < 0) delete o.fuente; }
+    if (o.tabla === "series_gym" && vacio(o.rutina)) o.rutina = "Gym";
+    // Números escritos como «620 kcal» o «72,4»
+    Object.keys(RANGOS[o.tabla] || {}).forEach(function (k) { if (!vacio(o[k]) && typeof o[k] === "string" && isFinite(aNumero(o[k]))) o[k] = aNumero(o[k]); });
     return o;
   }
 
   function describirRegistro(r) {
     if (!r || !r.tabla) return { ok: false, texto: "Registro no reconocido" };
     var n = function (v) { return vacio(v) ? "?" : fmt(v, 1); };
-    var problema = !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? "fecha no válida" : r.fecha > hoy ? "fecha futura" : "";
+    var problema = !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? "fecha no válida" : r.fecha > hoy ? "fecha futura" : problemaDatos(r);
     var cuando = r.fecha !== estado.fecha && !problema ? " · " + corta(r.fecha) : "";
     var d;
     if (r.tabla === "comidas") d = { ok: !!(r.tipo_comida && r.descripcion), texto: cap(r.tipo_comida || "?") + ": " + String(r.descripcion || "?") + " · " + n(r.kcal) + " kcal · " + n(r.proteina_g) + " g proteína" + (r.estimado === true || r.estimado === "true" ? " (estimado)" : "") };
@@ -770,6 +814,13 @@
     var T = estado.tablas;
     if (!T || !T[r.tabla] || !estado.desde || r.fecha < estado.desde) return false;
     return T[r.tabla].some(function (x) { return huellaRegistro(Object.assign({ tabla: r.tabla }, x, { fecha: normFecha(x.fecha) })) === clave; });
+  }
+  function explicarFallo(e) {
+    var m = e && e.message ? e.message : "error desconocido";
+    var t = m.replace(/^(\w+) no es válido/, function (x, c) { return (NOMBRES[c] || c) + " no es válido"; })
+      .replace(/^(\w+) es (mayor|menor) que/, function (x, c, mm) { return (NOMBRES[c] || c) + " es " + mm + " que"; })
+      .replace(/^Falta (\w+)/, function (x, c) { return "Falta " + (NOMBRES[c] || c); });
+    return t;
   }
   function enviarRegistro(r) {
     var fila = {};
@@ -829,9 +880,14 @@
       function trabajador() {
         if (parar || !pendientes.length) return Promise.resolve();
         var r = pendientes.shift();
-        return enviarRegistro(r).then(function () { res.ok++; res.fechas.push(r.fecha); }, function (e) {
+        var intento = function () { return enviarRegistro(r); };
+        return intento().catch(function (e) {
+          // Un tropiezo de conexión o de Google ocupado: se intenta otra vez
+          if (e && (e.noAutorizado || e.datos)) throw e;
+          return new Promise(function (ok) { setTimeout(ok, 1500); }).then(intento);
+        }).then(function () { res.ok++; res.fechas.push(r.fecha); }, function (e) {
           if (e && e.noAutorizado) { parar = e; return; }
-          res.fallos.push(describirRegistro(r).texto + " → " + (e && e.message ? e.message : "error"));
+          res.fallos.push({ r: r, texto: describirRegistro(r).texto + " → " + explicarFallo(e) });
         }).then(function () { hechos++; guardar.textContent = "Guardando " + hechos + " de " + total + "…"; return trabajador(); });
       }
       Promise.all([trabajador(), trabajador(), trabajador()]).then(function () {
@@ -846,8 +902,11 @@
         if (!res.fallos.length) { cerrarHoja(); aviso(res.ok + (res.ok === 1 ? " registro guardado" : " registros guardados")); return; }
         aviso("Guardé " + res.ok + " y fallaron " + res.fallos.length + ".", true);
         vista.textContent = ""; resumen.hidden = true;
-        res.fallos.forEach(function (f) { vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: "No se guardó: " + f })))); });
-        listo(false); area.value = "";
+        res.fallos.forEach(function (f) { vista.appendChild(h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: "No se guardó: " + f.texto })))); });
+        // Los que fallaron quedan en el cuadro para corregirlos o reintentar
+        area.value = JSON.stringify(res.fallos.map(function (f) { return f.r; }), null, 1);
+        vista.insertBefore(h("p", { class: "ayuda", text: "Dejé en el cuadro de arriba solo los que no se guardaron. Puedes tocar Revisar para intentarlo otra vez, o pedirle a Claude que los corrija." }), vista.firstChild);
+        listo(false);
       }).catch(function (e) { guardar.disabled = false; revisar.disabled = false; manejarError(e); });
     });
 
