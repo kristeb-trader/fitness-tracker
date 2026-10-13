@@ -200,6 +200,19 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog button:has-text("Guardar ejercicio")');
       await page.waitForSelector('.item:has-text("Caminata")');
     });
+    await prueba('tocar la tarjeta de Sueño o de Peso abre el registro listo para escribir', async () => {
+      await page.click('.dos button[aria-label="Registrar horas de sueño"]');
+      await page.waitForSelector('dialog [role=tab].on:has-text("Medidas")');
+      await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'f-horas_sueno');
+      assert.strictEqual(await page.inputValue('#f-peso_kg'), '71.6', 'trae el peso ya guardado del día');
+      await page.keyboard.type('7.5');
+      await page.click('dialog button:has-text("Guardar medidas")');
+      await page.waitForFunction(() => /7,5\s*h/.test(document.querySelector('.dos').innerText));
+      assert.ok((await page.innerText('.dos')).includes('71,6'), 'no borra el peso');
+      await page.click('.dos button[aria-label="Registrar peso y cintura"]');
+      await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'f-peso_kg');
+      await page.keyboard.press('Escape');
+    });
     await prueba('borrar una serie de gym desde su detalle', async () => {
       page.once('dialog', (d) => d.accept());
       await page.click('.item:has-text("Press banca")');

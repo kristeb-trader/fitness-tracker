@@ -141,3 +141,10 @@ input, select, textarea { width: 100%; padding: 12px; border: 1px solid var(--li
 .app.actualizando::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 30; background: linear-gradient(90deg, transparent, var(--lime), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: barrita 1.1s ease-in-out infinite; }
 @keyframes barrita { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 @media (prefers-reduced-motion: reduce) { .girando, .app.actualizando::before { animation: none; } }
+
+/* Tarjetas de peso y sueño: se tocan para registrar */
+button.card.tocable { border: 0; font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; }
+button.card.tocable:active { transform: scale(.98); }
+.card .cab .mas { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--lime); color: var(--ink, #111); display: grid; place-items: center; font-size: 18px; font-weight: 800; line-height: 1; }
+.card .cab { gap: 8px; }
+.card .cab .chip-ico + span { margin-right: auto; }

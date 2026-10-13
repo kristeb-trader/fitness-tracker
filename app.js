@@ -449,15 +449,15 @@
     ));
 
     raiz.appendChild(h("div", { class: "dos" },
-      h("div", { class: "card" },
-        h("div", { class: "cab" }, h("div", { class: "chip-ico", style: "background:#FFF1D6;color:#9A5B00" }, icono("peso", 20)), h("span", { text: "Peso" })),
+      h("button", { type: "button", class: "card tocable", "aria-label": "Registrar peso y cintura", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } },
+        h("div", { class: "cab" }, h("div", { class: "chip-ico", style: "background:#FFF1D6;color:#9A5B00" }, icono("peso", 20)), h("span", { text: "Peso" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", {}, h("div", { class: "valor" }, peso === null ? "—" : fmt(peso, 1), " ", h("small", { text: "kg" })),
           h("div", { class: "nota", text: (cintura === null ? "Cintura sin registrar" : "Cintura " + fmt(cintura, 1) + " cm") + (pesoFecha && pesoFecha !== estado.fecha ? " · al " + corta(pesoFecha) : "") })),
         barritasPeso(d.pesos || [])),
-      h("div", { class: "card" },
-        h("div", { class: "cab" }, h("div", { class: "chip-ico", style: "background:#E4EEFB;color:#2F6FC0" }, icono("luna", 20)), h("span", { text: "Sueño" })),
+      h("button", { type: "button", class: "card tocable", "aria-label": "Registrar horas de sueño", onclick: function () { abrirAgregar("medidas", { enfocar: "horas_sueno" }); } },
+        h("div", { class: "cab" }, h("div", { class: "chip-ico", style: "background:#E4EEFB;color:#2F6FC0" }, icono("luna", 20)), h("span", { text: "Sueño" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", {}, h("div", { class: "valor" }, sueno === null ? "—" : fmt(sueno, 1), " ", h("small", { text: "h" })),
-          h("div", { class: "nota", text: sueno === null ? "Sin registrar" : "de 8 h" })),
+          h("div", { class: "nota", text: sueno === null ? "Toca para registrar" : "de 8 h" })),
         puntos)
     ));
 
@@ -575,16 +575,20 @@
     return f;
   }
 
-  function formMedidas() {
+  function formMedidas(opc) {
+    opc = opc || {};
+    var ya = vistaDia().medida || {};
+    var val = function (k) { return vacio(ya[k]) ? "" : String(ya[k]); };
     var btn = h("button", { class: "btn lima", type: "submit", text: "Guardar medidas" });
     var f = h("form", { novalidate: true },
       h("p", { class: "ayuda", text: "Un registro por día. Si guardas otra vez el mismo día, solo se actualizan los campos que llenes." }),
       campo("Fecha", "fecha", { attrs: { type: "date", required: true, max: hoy }, valor: estado.fecha }),
       h("div", { class: "grid2" },
-        campo("Peso en ayunas (kg)", "peso_kg", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" } }),
-        campo("Cintura (cm)", "cintura_cm", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" } })),
-      campo("Horas de sueño", "horas_sueno", { attrs: { type: "number", min: 0, max: 24, step: 0.1, inputmode: "decimal" } }),
+        campo("Peso en ayunas (kg)", "peso_kg", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" }, valor: val("peso_kg") }),
+        campo("Cintura (cm)", "cintura_cm", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" }, valor: val("cintura_cm") })),
+      campo("Horas de sueño", "horas_sueno", { attrs: { type: "number", min: 0, max: 24, step: 0.1, inputmode: "decimal" }, valor: val("horas_sueno") }),
       btn);
+    if (opc.enfocar) setTimeout(function () { var el = f.querySelector('[name="' + opc.enfocar + '"]'); if (el) { el.focus(); if (el.select) el.select(); } }, 60);
     f.addEventListener("submit", function (e) {
       e.preventDefault();
       var fila = leerForm(f, ["peso_kg", "cintura_cm", "horas_sueno"]);
@@ -824,14 +828,14 @@
     else plan_b();
   }
 
-  function abrirAgregar(tab) {
+  function abrirAgregar(tab, opc) {
     var cuerpo = h("div", {});
     var tabs = h("div", { class: "tabs", role: "tablist" });
     var defs = (estado.chat ? [["chat", "Chat", formChat]] : []).concat([["pegar", "Pegar", formPegar], ["comida", "Comida", formComida], ["medidas", "Medidas", formMedidas], ["ejercicio", "Ejercicio", formEjercicio]]);
     function mostrar(clave) {
       cuerpo.textContent = "";
       Array.prototype.forEach.call(tabs.children, function (b, i) { b.className = defs[i][0] === clave ? "on" : ""; b.setAttribute("aria-selected", defs[i][0] === clave); });
-      cuerpo.appendChild(defs.filter(function (x) { return x[0] === clave; })[0][2]());
+      cuerpo.appendChild(defs.filter(function (x) { return x[0] === clave; })[0][2](clave === tab ? opc : undefined));
     }
     defs.forEach(function (x) { tabs.appendChild(h("button", { type: "button", role: "tab", text: x[1], onclick: function () { mostrar(x[0]); } })); });
     abrirHoja("Agregar registro", h("div", { style: "display:flex;flex-direction:column;gap:6px" }, tabs, cuerpo));
