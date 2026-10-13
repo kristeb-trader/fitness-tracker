@@ -119,7 +119,7 @@ Los mensajes de conexión traen un **Detalle** entre paréntesis. Si necesitas a
 
 ## Cómo se usa
 
-- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas, ejercicio y series de gym del día. Con las flechas y la tira de días ves otros días al instante, porque la app trae los últimos 60 días de una vez. Al volver a la app después de un rato, se actualiza sola.
+- **Hoy:** anillo con las calorías que te quedan, barra de proteína, carbos y grasa, peso, cintura, sueño, comidas, ejercicio y series de gym del día. Con las flechas y la tira de días ves otros días al instante, porque la app trae los últimos 60 días de una vez. Al abrir la app ves al instante lo último que se trajo (queda guardado solo en tu celular) y, por detrás, se actualiza con Google: una barrita verde arriba indica que está actualizando. Al volver a la app después de un rato, se actualiza sola.
 - **Botón +:** abre **Pegar** (registrar con ayuda de tu chat de Claude), los formularios de comida, medidas (peso, cintura, sueño) y ejercicio, y el **Chat** si activaste el Paso 4c. En Claude puedes escribir cosas como «desayuno 3 huevos y 2 tostadas», «peso 72,4, cintura 85, dormí 7 horas», «caminata 40 minutos» o «press banca 4 series de 8 con 60 kg».
 - **Tocar una comida, un ejercicio o un ejercicio de gym:** ver el detalle o borrarlo (en gym, serie por serie).
 - **Pegar:** si Claude no pone fecha, se guarda en el día que tienes abierto. Acepta fechas como `9/10/2026` y avisa si una fecha es futura. Al guardar, la app te lleva al día de lo guardado.

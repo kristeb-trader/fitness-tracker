@@ -50,6 +50,7 @@ async function abrir(configJs, servicios) {
     const servicio = servicios[url];
     const cuerpo = route.request().postData() || '{}';
     llamadas.push({ url, accion: JSON.parse(cuerpo).accion });
+    if (control.retraso) await new Promise((r) => setTimeout(r, control.retraso));
     if (control.fallo === 'red') return route.abort('failed');
     if (control.fallo === 'html') return route.fulfill({ status: 200, contentType: 'text/html', body: '<html>Sorry, unable to open the file at this time.</html>' });
     if (!servicio) return route.fulfill({ status: 404, contentType: 'text/html', body: 'no existe' });
@@ -132,6 +133,26 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.nav [aria-label="Hoy"]');
       await page.waitForSelector('.plato');
       assert.strictEqual(llamadas.length, antes);
+    });
+    await prueba('al volver a abrir: se ve al instante con lo guardado y se actualiza con UNA sola consulta', async () => {
+      control.retraso = 2500; // Google lento
+      const antes = llamadas.length;
+      const t0 = Date.now();
+      await page.reload();
+      await page.waitForSelector('.plato', { timeout: 1500 });
+      assert.ok(Date.now() - t0 < 2000, 'se mostró antes de que Google respondiera');
+      assert.ok(await page.locator('.app.actualizando').count() === 1, 'muestra la barrita de actualización');
+      await page.waitForSelector('.app:not(.actualizando)', { timeout: 6000 });
+      control.retraso = 0;
+      const nuevas = llamadas.slice(antes).map((l) => l.accion);
+      assert.deepStrictEqual(nuevas, ['leer']);
+    });
+    await prueba('sin internet al abrir: muestra lo guardado y avisa', async () => {
+      control.fallo = 'red';
+      await page.reload();
+      await page.waitForSelector('.plato');
+      await page.waitForSelector('text=Sin conexión con Google');
+      control.fallo = null;
     });
     await prueba('Pegar: sin fecha usa el día abierto; acepta «Almuerzo»; rechaza fechas futuras y tablas raras', async () => {
       await page.click('.fab');

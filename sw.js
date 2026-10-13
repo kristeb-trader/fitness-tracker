@@ -1,5 +1,6 @@
-// Guarda solo los archivos de la app para que abra rápido. Tus datos nunca se guardan aquí.
-const CACHE = "seguimiento-v3";
+// Guarda solo los archivos de la app para que abra al instante. Tus datos nunca se guardan aquí.
+// Abre con lo guardado en el teléfono y, por detrás, descarga la versión nueva para la próxima vez.
+const CACHE = "seguimiento-v4";
 const ARCHIVOS = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -15,9 +16,16 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return; // lo de Google va directo a la red
+  if (url.pathname.endsWith("/apps-script/Code.gs")) return; // siempre la versión más nueva
   e.respondWith(
-    fetch(e.request)
-      .then((r) => { const copia = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); return r; })
-      .catch(() => caches.match(e.request))
+    caches.open(CACHE).then((c) =>
+      c.match(e.request, { ignoreSearch: true }).then((guardado) => {
+        const red = fetch(e.request)
+          .then((r) => { if (r.ok) c.put(e.request, r.clone()); return r; })
+          .catch(() => guardado);
+        if (guardado) { e.waitUntil(red); return guardado; }
+        return red;
+      })
+    )
   );
 });

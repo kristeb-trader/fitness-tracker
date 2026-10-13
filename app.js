@@ -165,7 +165,7 @@
     return ((e && e.message) || "Error") + (e && e.detalle ? " (Detalle: " + e.detalle + ")" : "");
   }
   function manejarError(e) {
-    if (e && e.noAutorizado) { borrarLocal("token"); tokenMemoria = ""; pantallaEntrada("La contraseña no es correcta."); return; }
+    if (e && e.noAutorizado) { borrarLocal("token"); olvidarDatos(); tokenMemoria = ""; pantallaEntrada("La contraseña no es correcta."); return; }
     var msg = textoError(e);
     var enEntrada = document.querySelector(".entrada .error");
     if (enEntrada) enEntrada.textContent = msg;
@@ -220,40 +220,81 @@
     return o;
   }
 
-  /** Trae los datos. Con el servicio nuevo, trae los últimos días de una vez. */
-  function cargar() {
+  // Lo último que se trajo queda guardado en este teléfono: al abrir la app se ve al instante.
+  function guardarCache() {
+    if (!estado.tablas) return;
+    guardarLocal("datos", JSON.stringify({ url: urlServicio(), version: estado.version, chat: estado.chat, metas: estado.metas, tablas: estado.tablas, desde: estado.desde, guardado: Date.now() }));
+  }
+  function leerCache() {
+    try {
+      var c = JSON.parse(leerLocal("datos") || "null");
+      if (c && c.url === urlServicio() && c.tablas && c.tablas.comidas) return c;
+    } catch (e) { /* guardado dañado: se ignora */ }
+    return null;
+  }
+  function usarCache(c) {
+    estado.version = c.version; estado.chat = !!c.chat; estado.metas = c.metas || {};
+    estado.tablas = c.tablas; estado.desde = c.desde; estado.cargadoEn = new Date(c.guardado || Date.now());
+  }
+  function olvidarDatos() { borrarLocal("datos"); estado.tablas = null; estado.version = null; }
+
+  function recibirTodo(r, desde) {
+    estado.tablas = {
+      comidas: (r.comidas || []).map(filaNormal),
+      ejercicio: (r.ejercicio || []).map(filaNormal),
+      series_gym: (r.series_gym || []).map(filaNormal),
+      medidas: (r.medidas || []).map(filaNormal)
+    };
+    estado.metas = r.metas || {};
+    estado.chat = !!r.chat;
+    estado.desde = desde;
+    estado.legado = null;
+    estado.version = Number(r.version) || 2;
+  }
+
+  function cargarLegado() {
+    return api("dia", { fecha: estado.fecha }).then(function (r) {
+      estado.legado = r.datos;
+      estado.metas = (r.datos && r.datos.metas) || {};
+      estado.chat = !!(r.datos && r.datos.chat);
+      estado.tablas = null;
+    });
+  }
+
+  function pantallaCargando() {
+    raiz.textContent = "";
+    raiz.appendChild(h("div", { class: "cargando-inicio", role: "status" }, h("div", { class: "girando" }), h("p", { text: "Cargando tus datos…" })));
+  }
+
+  /**
+   * Trae los datos con UNA sola consulta a Google. silencioso: no oscurece la pantalla
+   * (se usa cuando ya hay datos a la vista y solo se actualizan).
+   */
+  var cargandoAhora = null;
+  function cargar(opc) {
+    opc = opc || {};
+    if (cargandoAhora && opc.silencioso) return cargandoAhora;
     hoy = iso(new Date());
-    raiz.classList.add("cargando");
-    var paso = estado.version === null
-      ? api("ping").then(function (r) { estado.version = Number(r.version) || 1; estado.chat = !!r.chat; })
-      : Promise.resolve();
-    return paso.then(function () {
-      if (estado.version >= 2) {
-        var desde = sumarDias(estado.fecha < hoy ? estado.fecha : hoy, -DIAS_CARGADOS);
-        return api("leer", { desde: desde }).then(function (r) {
-          estado.tablas = {
-            comidas: (r.comidas || []).map(filaNormal),
-            ejercicio: (r.ejercicio || []).map(filaNormal),
-            series_gym: (r.series_gym || []).map(filaNormal),
-            medidas: (r.medidas || []).map(filaNormal)
-          };
-          estado.metas = r.metas || {};
-          estado.chat = !!r.chat;
-          estado.desde = desde;
-          estado.legado = null;
+    raiz.classList.add(opc.silencioso ? "actualizando" : "cargando");
+    var desde = sumarDias(estado.fecha < hoy ? estado.fecha : hoy, -DIAS_CARGADOS);
+    var paso = estado.version !== null && estado.version < 2
+      ? cargarLegado()
+      : api("leer", { desde: desde }).then(function (r) { recibirTodo(r, desde); }, function (e) {
+          // Servicio anterior (versión 1): no conoce «leer»
+          if (e && e.message === "Acción desconocida") { estado.version = 1; return cargarLegado(); }
+          throw e;
         });
-      }
-      return api("dia", { fecha: estado.fecha }).then(function (r) {
-        estado.legado = r.datos;
-        estado.metas = (r.datos && r.datos.metas) || {};
-        estado.chat = !!(r.datos && r.datos.chat);
-        estado.tablas = null;
-      });
-    }).then(function () {
+    cargandoAhora = paso.then(function () {
       estado.cargadoEn = new Date();
-      raiz.classList.remove("cargando");
+      raiz.classList.remove("cargando", "actualizando");
       pintar();
-    }).catch(function (e) { raiz.classList.remove("cargando"); manejarError(e); });
+      guardarCache();
+    }).catch(function (e) {
+      raiz.classList.remove("cargando", "actualizando");
+      if (opc.silencioso && estado.tablas && !(e && e.noAutorizado)) aviso("Sin conexión con Google: ves lo último guardado.", true);
+      else manejarError(e);
+    }).then(function () { cargandoAhora = null; });
+    return cargandoAhora;
   }
 
   /** Cambia de día: si los datos ya están en el teléfono, es instantáneo. */
@@ -853,12 +894,12 @@
         var u = entrada.value.trim();
         if (!URL_VALIDA.test(u)) { err.textContent = "La dirección debe empezar con https://script.google.com/macros/s/ y terminar en /exec."; return; }
         guardarLocal("servicio", u);
-        estado.version = null; estado.tablas = null;
+        olvidarDatos();
         cerrarHoja(); aviso("Dirección guardada");
         if (leerLocal("token")) cargar(); else pantallaEntrada("");
       } }),
       leerLocal("servicio") ? h("button", { class: "btn sec", text: "Volver a la dirección de config.js", onclick: function () {
-        borrarLocal("servicio"); estado.version = null; estado.tablas = null; cerrarHoja(); inicio();
+        borrarLocal("servicio"); olvidarDatos(); cerrarHoja(); inicio();
       } }) : null));
   }
 
@@ -902,8 +943,8 @@
       h("h4", { text: "Mis metas" }),
       lineas(pares),
       h("p", { class: "ayuda", text: "Se cambian en la pestaña «metas» de tu hoja de Google." }),
-      h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { estado.version = null; cerrarHoja(); cargar(); } }),
-      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
+      h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { if (estado.version < 2) estado.version = null; cerrarHoja(); cargar(); } }),
+      h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); olvidarDatos(); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
       avanzado
     ));
   }
@@ -913,8 +954,8 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState !== "visible" || !tokenMemoria || hojaActual) return;
     var ahora = iso(new Date());
-    if (ahora !== hoy) { if (estado.fecha === hoy) estado.fecha = ahora; hoy = ahora; cargar(); return; }
-    if (!estado.cargadoEn || Date.now() - estado.cargadoEn.getTime() > 2 * 60 * 1000) cargar();
+    if (ahora !== hoy) { if (estado.fecha === hoy) estado.fecha = ahora; hoy = ahora; pintar(); cargar({ silencioso: true }); return; }
+    if (!estado.cargadoEn || Date.now() - estado.cargadoEn.getTime() > 2 * 60 * 1000) cargar({ silencioso: true });
   });
 
   function inicio() {
@@ -926,7 +967,10 @@
       return;
     }
     tokenMemoria = leerLocal("token");
-    if (!tokenMemoria) pantallaEntrada(""); else cargar();
+    if (!tokenMemoria) { pantallaEntrada(""); return; }
+    var c = leerCache();
+    if (c) { usarCache(c); pintar(); cargar({ silencioso: true }); }
+    else { pantallaCargando(); cargar(); }
   }
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
