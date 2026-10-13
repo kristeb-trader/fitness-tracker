@@ -181,7 +181,10 @@
   var estado = {
     fecha: hoy,
     pantalla: "hoy", // "hoy" o "progreso"
-    periodo: 30,     // días que muestra Progreso
+    periodo: 30,     // Progreso: 7, 30, 90, "mes" o "fechas"
+    rango: null,     // fechas elegidas a mano {desde, hasta}
+    filtroDias: "todos", // "todos", "entreno" o "descanso"
+    seccion: "energia",
     gymEjercicio: null,
     version: null,   // versión del servicio de Google (1 = anterior a esta app)
     chat: false,
@@ -284,6 +287,7 @@
     hoy = iso(new Date());
     raiz.classList.add(opc.silencioso ? "actualizando" : "cargando");
     var desde = sumarDias(estado.fecha < hoy ? estado.fecha : hoy, -DIAS_CARGADOS);
+    if (estado.tablas && estado.desde && estado.desde < desde) desde = estado.desde > sumarDias(hoy, -400) ? estado.desde : sumarDias(hoy, -400);
     var paso = estado.version !== null && estado.version < 2
       ? cargarLegado()
       : api("leer", { desde: desde }).then(function (r) { recibirTodo(r, desde); }, function (e) {
@@ -521,7 +525,7 @@
   }
 
   // ---------- Pantalla "Progreso" ----------
-  var COLOR = { tinta: "#14281E", verde: "#8CC63F", ambar: "#E0A030", banda: "#E8F5D4", rejilla: "#EEF1EB", texto: "#5C6B60", azul: "#4A90E2", azulClaro: "#9DBDE8", cintura: "#2E5A12", lima: "#A8E063" };
+  var COLOR = { tinta: "#14281E", verde: "#8CC63F", ambar: "#E0A030", banda: "#E8F5D4", rejilla: "#EEF1EB", texto: "#5C6B60", azul: "#4A90E2", azulClaro: "#9DBDE8", deficit: "#2E7D32", cintura: "#2E5A12", lima: "#A8E063" };
   function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function fechaLarga(f) { var d = deISO(f); return cap(DIAS_LARGO[d.getDay()]) + " " + corta(f); }
 
@@ -543,26 +547,30 @@
       s += '<text x="' + x(f[0]).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="' + anc + '">' + esc(f[1]) + "</text>";
     });
     if (o.banda) s += '<rect x="' + L + '" width="' + (R - L) + '" y="' + y(o.banda[1]).toFixed(1) + '" height="' + (y(o.banda[0]) - y(o.banda[1])).toFixed(1) + '" fill="' + COLOR.banda + '"/>';
+    if (o.cero && o.min < 0 && o.max > 0) s += '<line x1="' + L + '" x2="' + R + '" y1="' + y(0).toFixed(1) + '" y2="' + y(0).toFixed(1) + '" stroke="' + COLOR.tinta + '" stroke-width="1.2"/>';
     var hits = "";
     var n = o.n || o.puntos.length;
     var paso = (R - L) / Math.max(1, n);
     if (o.tipo === "barras") {
       var bw = Math.max(2, Math.min(18, paso - 2));
       o.puntos.forEach(function (p, i) {
-        var cx = L + paso * (p.i + 0.5), top = y(Math.max(o.min, Math.min(o.max, p.v))), base = y(o.min);
-        var r = Math.min(3, bw / 2, base - top);
-        s += '<path d="M' + (cx - bw / 2).toFixed(1) + "," + base.toFixed(1) + "V" + (top + r).toFixed(1) + "q0,-" + r + " " + r + ",-" + r + "h" + (bw - 2 * r).toFixed(1) + "q" + r + ",0 " + r + "," + r + "V" + base.toFixed(1) + 'Z" fill="' + p.color + '"/>';
+        var cx = L + paso * (p.i + 0.5), top = y(Math.max(o.min, Math.min(o.max, p.v))), base = y(Math.max(o.min, 0));
+        var r = Math.min(3, bw / 2, Math.abs(base - top));
+        if (p.v < 0) s += '<rect x="' + (cx - bw / 2).toFixed(1) + '" y="' + base.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(1, top - base).toFixed(1) + '" rx="' + r.toFixed(1) + '" fill="' + p.color + '"/>';
+        else s += '<path d="M' + (cx - bw / 2).toFixed(1) + "," + base.toFixed(1) + "V" + (top + r).toFixed(1) + "q0,-" + r + " " + r + ",-" + r + "h" + (bw - 2 * r).toFixed(1) + "q" + r + ",0 " + r + "," + r + "V" + base.toFixed(1) + 'Z" fill="' + p.color + '"/>';
         if (p.meta !== undefined) s += '<line x1="' + (cx - paso / 2).toFixed(1) + '" x2="' + (cx + paso / 2).toFixed(1) + '" y1="' + y(p.meta).toFixed(1) + '" y2="' + y(p.meta).toFixed(1) + '" stroke="' + COLOR.tinta + '" stroke-width="2"/>';
         hits += '<rect class="hit" data-i="' + i + '" x="' + (cx - paso / 2).toFixed(1) + '" y="' + T + '" width="' + paso.toFixed(1) + '" height="' + (B - T) + '" fill="transparent"/>';
       });
+      if (o.linea && o.linea.length) s += '<path d="' + o.linea.map(function (q, k) { return (k ? "L" : "M") + (L + paso * (q.i + 0.5)).toFixed(1) + "," + y(q.v).toFixed(1); }).join("") + '" fill="none" stroke="' + COLOR.tinta + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
       if (o.lineaFija !== undefined) s += '<line x1="' + L + '" x2="' + R + '" y1="' + y(o.lineaFija).toFixed(1) + '" y2="' + y(o.lineaFija).toFixed(1) + '" stroke="' + COLOR.tinta + '" stroke-width="2"/>';
     } else {
       var px = function (p) { return L + (R - L) * p.x; };
       if (o.tendencia) s += '<path d="' + o.tendencia.map(function (p, i) { return (i ? "L" : "M") + px(p).toFixed(1) + "," + y(p.v).toFixed(1); }).join("") + '" fill="none" stroke="' + COLOR.tinta + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+      if (o.area && o.puntos.length > 1) s += '<path d="' + o.puntos.map(function (p, i) { return (i ? "L" : "M") + px(p).toFixed(1) + "," + y(p.v).toFixed(1); }).join("") + "L" + px(o.puntos[o.puntos.length - 1]).toFixed(1) + "," + y(0).toFixed(1) + "L" + px(o.puntos[0]).toFixed(1) + "," + y(0).toFixed(1) + 'Z" fill="rgba(140,198,63,.25)"/>';
       if (o.unir && o.puntos.length > 1) s += '<path d="' + o.puntos.map(function (p, i) { return (i ? "L" : "M") + px(p).toFixed(1) + "," + y(p.v).toFixed(1); }).join("") + '" fill="none" stroke="' + o.color + '" stroke-width="2" stroke-linejoin="round"/>';
       var radio = o.puntos.length > 40 ? 2.5 : 4;
       o.puntos.forEach(function (p, i) {
-        s += '<circle cx="' + px(p).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="' + radio + '" fill="' + (o.relleno || o.color) + '" stroke="' + (o.borde || "#fff") + '" stroke-width="2"/>';
+        if (!o.sinPuntos || i === o.puntos.length - 1) s += '<circle cx="' + px(p).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="' + radio + '" fill="' + (o.relleno || o.color) + '" stroke="' + (o.borde || "#fff") + '" stroke-width="2"/>';
         hits += '<circle class="hit" data-i="' + i + '" cx="' + px(p).toFixed(1) + '" cy="' + y(p.v).toFixed(1) + '" r="14" fill="transparent"/>';
       });
       var u = o.puntos[o.puntos.length - 1];
@@ -593,7 +601,7 @@
     return h("div", { class: "graf" }, h("h3", { text: titulo }), desc ? h("div", { class: "d", text: desc }) : null, extra);
   }
   function marcasDe(min, max, n) {
-    var paso = [0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].filter(function (p) { return (max - min) / p <= (n || 4); })[0] || 1000;
+    var paso = [0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000].filter(function (p) { return (max - min) / p <= (n || 4); })[0] || 1000;
     var out = [];
     for (var v = Math.ceil(min / paso) * paso; v <= max + 1e-9; v += paso) out.push(+v.toFixed(2));
     return out;
@@ -603,6 +611,70 @@
     return [[0.5 / n, corta(dias[0])], [0.5, corta(dias[Math.floor((n - 1) / 2)])], [1 - 0.5 / n, corta(dias[n - 1])]];
   }
   function signo(v, dec, u) { return (v > 0 ? "+" : v < 0 ? "−" : "") + fmt(Math.abs(v), dec) + " " + u; }
+
+  // Si el periodo elegido empieza antes de lo que hay en el teléfono, se traen esas fechas una vez.
+  var cargandoRango = null, rangoFallido = null;
+  function asegurarDesde(f) {
+    if (!estado.tablas || !estado.desde || estado.desde <= f || cargandoRango || rangoFallido === f) return false;
+    cargandoRango = api("leer", { desde: f }).then(function (r) { recibirTodo(r, f); guardarCache(); }, function (e) {
+      rangoFallido = f;
+      aviso("No pude traer esas fechas: " + (e && e.message ? e.message : "error"), true);
+    }).then(function () { cargandoRango = null; if (estado.pantalla === "progreso" && !hojaActual) pintar(); });
+    return true;
+  }
+
+  function rangoElegido() {
+    var p = estado.periodo, ini, fin = hoy;
+    if (p === "mes") ini = hoy.slice(0, 8) + "01";
+    else if (p === "fechas" && estado.rango) { ini = estado.rango.desde; fin = estado.rango.hasta; }
+    else ini = sumarDias(hoy, -((Number(p) || 30) - 1));
+    if (ini > fin) { var x = ini; ini = fin; fin = x; }
+    var dias = [];
+    for (var f = ini; f <= fin; f = sumarDias(f, 1)) dias.push(f);
+    return { ini: ini, fin: fin, dias: dias };
+  }
+
+  /** Totales por día de todo lo que hay en el teléfono. */
+  function totalesPorDia() {
+    var T = estado.tablas, porDia = {};
+    function dia(f) { return porDia[f] || (porDia[f] = { kcal: 0, prot: 0, carb: 0, gra: 0, comidas: 0, porTipo: {}, ejercicio: 0, sesiones: [], gym: false, sueno: null }); }
+    T.comidas.forEach(function (c) {
+      if (!c.fecha) return;
+      var d = dia(c.fecha), k = Number(c.kcal) || 0;
+      d.kcal += k; d.prot += Number(c.proteina_g) || 0; d.carb += Number(c.carbos_g) || 0; d.gra += Number(c.grasa_g) || 0; d.comidas++;
+      var t = c.tipo_comida || "snack"; d.porTipo[t] = (d.porTipo[t] || 0) + k;
+    });
+    T.ejercicio.forEach(function (e) { if (!e.fecha) return; var d = dia(e.fecha); d.ejercicio += Number(e.kcal) || 0; d.sesiones.push({ tipo: e.tipo || "otro", kcal: Number(e.kcal) || 0 }); });
+    T.series_gym.forEach(function (s) { if (s.fecha) dia(s.fecha).gym = true; });
+    T.medidas.forEach(function (x) { if (x.fecha && !vacio(x.horas_sueno)) dia(x.fecha).sueno = Number(x.horas_sueno); });
+    return porDia;
+  }
+  var VACIO_DIA = { kcal: 0, prot: 0, carb: 0, gra: 0, comidas: 0, porTipo: {}, ejercicio: 0, sesiones: [], gym: false, sueno: null };
+  function entrenoEse(d) { return d.sesiones.length > 0 || d.gym; }
+
+  /** El consolidado de una lista de días (con el filtro de días ya aplicado). */
+  function consolidado(dias, porDia) {
+    var m = estado.metas || {}, base = numMeta(m.kcal_base, 2500), protMin = numMeta(m.proteina_min_g, 130);
+    var r = { dias: dias.length, registrados: 0, consumido: 0, gastado: 0, prot: 0, carb: 0, gra: 0, diasProt: 0, sueno: 0, noches: 0, noches8: 0, sesiones: 0, tipos: {}, quemado: 0, porTipo: {} };
+    dias.forEach(function (f) {
+      var d = porDia[f] || VACIO_DIA;
+      d.sesiones.forEach(function (s) { r.sesiones++; r.tipos[s.tipo] = (r.tipos[s.tipo] || { n: 0, kcal: 0 }); r.tipos[s.tipo].n++; r.tipos[s.tipo].kcal += s.kcal; r.quemado += s.kcal; });
+      if (d.gym && !d.sesiones.some(function (s) { return s.tipo === "gym"; })) { r.sesiones++; r.tipos.gym = r.tipos.gym || { n: 0, kcal: 0 }; r.tipos.gym.n++; }
+      if (d.sueno !== null) { r.sueno += d.sueno; r.noches++; if (d.sueno >= 8) r.noches8++; }
+      if (!d.comidas) return;
+      r.registrados++;
+      r.consumido += d.kcal; r.gastado += base + d.ejercicio;
+      r.prot += d.prot; r.carb += d.carb; r.gra += d.gra;
+      if (d.prot >= protMin) r.diasProt++;
+      Object.keys(d.porTipo).forEach(function (t) { r.porTipo[t] = (r.porTipo[t] || 0) + d.porTipo[t]; });
+    });
+    r.balance = r.consumido - r.gastado;
+    var n = r.registrados || 1;
+    r.consumidoDia = r.consumido / n; r.gastadoDia = r.gastado / n; r.balanceDia = r.balance / n;
+    r.protDia = r.prot / n; r.carbDia = r.carb / n; r.graDia = r.gra / n;
+    r.suenoProm = r.noches ? r.sueno / r.noches : null;
+    return r;
+  }
 
   function pintarProgreso() {
     raiz.textContent = "";
@@ -619,158 +691,290 @@
       return;
     }
 
-    var periodo = estado.periodo;
-    raiz.appendChild(h("div", { class: "periodo", role: "tablist", "aria-label": "Periodo" }, [7, 30, 90].map(function (n) {
-      return h("button", { type: "button", role: "tab", "aria-selected": n === periodo, class: n === periodo ? "on" : "", text: n + " días",
-        onclick: function () { estado.periodo = n; pintar(); } });
+    var m = estado.metas || {};
+    var base = numMeta(m.kcal_base, 2500), protMin = numMeta(m.proteina_min_g, 130), protMax = numMeta(m.proteina_max_g, 160);
+    var defMin = numMeta(m.deficit_min_kcal, 200), defMax = numMeta(m.deficit_max_kcal, 300);
+    var R = rangoElegido();
+    var prevIni = sumarDias(R.ini, -R.dias.length), prevDias = [];
+    for (var f0 = prevIni; f0 < R.ini; f0 = sumarDias(f0, 1)) prevDias.push(f0);
+
+    // ---- Filtros
+    function pill(texto, activo, accion, etiqueta) {
+      return h("button", { type: "button", class: "pill" + (activo ? " on" : ""), "aria-pressed": activo ? "true" : "false", "aria-label": etiqueta || texto, text: texto, onclick: accion });
+    }
+    var p = estado.periodo;
+    var filaFechas = null;
+    if (p === "fechas") {
+      var rg = estado.rango || { desde: sumarDias(hoy, -29), hasta: hoy };
+      var cambiar = function () {
+        var d1 = document.getElementById("f-desde").value, d2 = document.getElementById("f-hasta").value;
+        if (!d1 || !d2) return;
+        estado.rango = { desde: d1 <= d2 ? d1 : d2, hasta: (d1 <= d2 ? d2 : d1) > hoy ? hoy : (d1 <= d2 ? d2 : d1) };
+        pintar();
+      };
+      filaFechas = h("div", { class: "fechas-f" },
+        h("label", {}, "Desde", h("input", { type: "date", id: "f-desde", value: rg.desde, max: hoy, onchange: cambiar })),
+        h("label", {}, "Hasta", h("input", { type: "date", id: "f-hasta", value: rg.hasta, max: hoy, onchange: cambiar })));
+    }
+    var fp = estado.filtroDias;
+    raiz.appendChild(h("div", { class: "filtros" },
+      h("div", { class: "fila-f", role: "group", "aria-label": "Periodo" }, h("span", { class: "lbl", text: "Periodo" }),
+        h("div", { class: "pills" },
+          [7, 30, 90].map(function (n) { return pill(n + " d", p === n, function () { estado.periodo = n; pintar(); }, n + " días"); }),
+          pill("Este mes", p === "mes", function () { estado.periodo = "mes"; pintar(); }),
+          pill("Fechas", p === "fechas", function () { estado.periodo = "fechas"; if (!estado.rango) estado.rango = { desde: sumarDias(hoy, -29), hasta: hoy }; pintar(); }, "Elegir fechas"))),
+      filaFechas,
+      h("div", { class: "fila-f", role: "group", "aria-label": "Días" }, h("span", { class: "lbl", text: "Días" }),
+        h("div", { class: "pills" },
+          pill("Todos", fp === "todos", function () { estado.filtroDias = "todos"; pintar(); }),
+          pill("Con entreno", fp === "entreno", function () { estado.filtroDias = "entreno"; pintar(); }),
+          pill("Descanso", fp === "descanso", function () { estado.filtroDias = "descanso"; pintar(); }))),
+      h("div", { class: "rango", text: corta(R.ini) + " – " + corta(R.fin) + " · " + R.dias.length + (R.dias.length === 1 ? " día" : " días") })));
+
+    // ¿Faltan datos de esas fechas en el teléfono?
+    // Trae de la hoja las fechas que falten (las del periodo y las anteriores, para comparar)
+    if ((asegurarDesde(prevIni) || cargandoRango) && R.ini < estado.desde) {
+      raiz.appendChild(h("div", { class: "graf cargando-inicio", style: "min-height:160px" }, h("div", { class: "girando" }), h("p", { text: "Trayendo esas fechas de tu hoja…" })));
+      raiz.appendChild(navegacion("progreso"));
+      return;
+    }
+
+    var porDia = totalesPorDia();
+    var pasa = function (f) { var d = porDia[f] || VACIO_DIA; return fp === "todos" || (fp === "entreno" ? entrenoEse(d) : !entrenoEse(d)); };
+    var diasF = R.dias.filter(pasa);
+    var C = consolidado(diasF, porDia);
+    var hayPrevio = estado.desde && estado.desde <= prevIni;
+    var P = hayPrevio ? consolidado(prevDias.filter(pasa), porDia) : null;
+    raiz.querySelector(".filtros .rango").textContent += " · " + C.registrados + " con comidas";
+
+    // ---- Consolidado (tarjeta verde)
+    var kcalF = function (v) { return (v < 0 ? "−" : v > 0 ? "+" : "") + fmt(Math.abs(Math.round(v))); };
+    var notaBal;
+    if (!C.registrados) notaBal = "Sin comidas registradas en estos días.";
+    else {
+      var defDia = -C.balanceDia;
+      notaBal = "≈ " + fmt(Math.abs(C.balance) / 7700, 1) + " kg de grasa " + (C.balance <= 0 ? "menos" : "más") + " (estimado) · " +
+        (defDia >= defMin && defDia <= defMax ? "✓ en tu meta de déficit" : defDia > defMax ? "déficit mayor que tu meta" : defDia > 0 ? "▲ menos déficit que tu meta" : "▲ en superávit");
+    }
+    raiz.appendChild(h("div", { class: "hero-bal" },
+      h("div", { class: "k", text: "Balance del periodo" }),
+      h("div", { class: "big" }, C.registrados ? kcalF(C.balance) : "—", h("small", { text: " kcal" })),
+      h("div", { class: "sub2", text: notaBal }),
+      h("div", { class: "tres" },
+        h("div", {}, h("b", { text: C.registrados ? fmt(C.consumidoDia) : "—" }), h("span", { text: "Consumido / día" })),
+        h("div", {}, h("b", { text: C.registrados ? fmt(C.gastadoDia) : "—" }), h("span", { text: "Gastado / día" })),
+        h("div", {}, h("b", { text: C.registrados ? kcalF(C.balanceDia) : "—" }), h("span", { text: C.balanceDia <= 0 ? "Déficit / día" : "Superávit / día" })))));
+
+    // ---- Indicadores con comparación
+    function delta(actual, previo, dec, unidad, mejorSiSube) {
+      if (P === null || previo === null || actual === null || isNaN(previo) || isNaN(actual)) return null;
+      var dlt = actual - previo;
+      if (Math.abs(dlt) < (dec ? 0.05 : 0.5)) return h("span", { class: "delta", text: "= igual" });
+      var bueno = mejorSiSube ? dlt > 0 : dlt < 0;
+      return h("span", { class: "delta " + (bueno ? "up" : "dn"), text: (dlt > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dlt), dec) + (unidad ? " " + unidad : "") });
+    }
+    function kpi(k, d, valor, unidad, nota, barra) {
+      return h("div", { class: "kpi" }, h("span", { class: "k" }, h("span", { text: k }), d),
+        h("span", { class: "v" }, valor, unidad ? h("small", { text: " " + unidad }) : null), h("span", { class: "n", text: nota }),
+        barra === undefined ? null : h("div", { class: "bar-meta" }, h("div", { style: "width:" + Math.round(Math.max(0, Math.min(1, barra)) * 100) + "%" })));
+    }
+    var tiposTxt = Object.keys(C.tipos).sort(function (a, b) { return C.tipos[b].n - C.tipos[a].n; }).map(function (t) { return C.tipos[t].n + " " + t; }).join(" · ");
+    raiz.appendChild(h("div", { class: "kpis" },
+      kpi("Proteína promedio", delta(C.registrados ? C.protDia : null, P && P.registrados ? P.protDia : null, 0, "g", true),
+        C.registrados ? fmt(C.protDia) : "—", "g/día", C.registrados ? C.diasProt + " de " + C.registrados + " días en la meta" : "Sin comidas", C.registrados ? C.diasProt / C.registrados : 0),
+      kpi("Sueño promedio", delta(C.suenoProm, P ? P.suenoProm : null, 1, "", true),
+        C.suenoProm === null ? "—" : fmt(C.suenoProm, 1), C.suenoProm === null ? "" : "h", C.noches ? C.noches8 + (C.noches8 === 1 ? " noche" : " noches") + " de 8 h o más" : "Sin registrar"),
+      kpi("Entrenamientos", delta(C.sesiones, P ? P.sesiones : null, 0, "", true), String(C.sesiones), "", tiposTxt || "Ninguno"),
+      kpi("Quemado en ejercicio", delta(C.quemado, P ? P.quemado : null, 0, "kcal", true), fmt(C.quemado), "kcal",
+        C.sesiones ? fmt(C.quemado / C.sesiones) + " kcal por sesión" : "Sin ejercicio")));
+    raiz.appendChild(h("div", { class: "nota-centro", text: P ? "▲▼ comparado con los " + prevDias.length + " días anteriores" : "La comparación con el periodo anterior aparece cuando hay datos de esas fechas." }));
+
+    // ---- Secciones
+    var sec = estado.seccion;
+    raiz.appendChild(h("div", { class: "secciones", role: "tablist" }, [["energia", "Energía"], ["nutricion", "Nutrición"], ["entreno", "Entreno"], ["cuerpo", "Cuerpo"]].map(function (x) {
+      return h("button", { type: "button", role: "tab", "aria-selected": x[0] === sec ? "true" : "false", class: x[0] === sec ? "on" : "", text: x[1], onclick: function () { estado.seccion = x[0]; pintar(); } });
     })));
 
-    var T = estado.tablas, m = estado.metas || {};
-    var protMin = numMeta(m.proteina_min_g, 130), protMax = numMeta(m.proteina_max_g, 160);
-    // Totales por día
-    var porDia = {};
-    function dia(f) { return porDia[f] || (porDia[f] = { kcal: 0, prot: 0, comidas: 0, ejercicio: 0, sesiones: [], sueno: null, gym: false }); }
-    T.comidas.forEach(function (c) { if (!c.fecha) return; var d = dia(c.fecha); d.kcal += Number(c.kcal) || 0; d.prot += Number(c.proteina_g) || 0; d.comidas++; });
-    T.ejercicio.forEach(function (e) { if (!e.fecha) return; var d = dia(e.fecha); d.ejercicio += Number(e.kcal) || 0; d.sesiones.push(e.tipo || "otro"); });
-    T.series_gym.forEach(function (s) { if (s.fecha) dia(s.fecha).gym = true; });
-    T.medidas.forEach(function (x) { if (x.fecha && !vacio(x.horas_sueno)) dia(x.fecha).sueno = Number(x.horas_sueno); });
+    var ejeX = fechasEje(R.dias), N = R.dias.length;
+    var indice = {}; R.dias.forEach(function (f, i) { indice[f] = i; });
+    var conComida = diasF.filter(function (f) { return porDia[f] && porDia[f].comidas; });
+    var sinDatos = function (t, d) { return tarjetaGraf(t, d || "No hay registros con este filtro."); };
+    var ejeKcal = function (t) { return (t < 0 ? "−" : "") + fmt(Math.abs(t)); };
 
-    // --- Esta semana (de lunes a hoy)
-    var lunes = iso(lunesDe(hoy)), semana = [];
-    for (var f = lunes; f <= hoy; f = sumarDias(f, 1)) semana.push(f);
-    var conComida = semana.filter(function (f) { return porDia[f] && porDia[f].comidas; });
-    var kcalProm = conComida.length ? conComida.reduce(function (a, f) { return a + porDia[f].kcal; }, 0) / conComida.length : null;
-    var metaProm = conComida.length ? conComida.reduce(function (a, f) { return a + metaDia(porDia[f].ejercicio); }, 0) / conComida.length : null;
-    var diasProt = conComida.filter(function (f) { return porDia[f].prot >= protMin; }).length;
-    var conSueno = semana.filter(function (f) { return porDia[f] && porDia[f].sueno !== null; });
-    var suenoProm = conSueno.length ? conSueno.reduce(function (a, f) { return a + porDia[f].sueno; }, 0) / conSueno.length : null;
-    var tipos = {}, sesiones = 0;
-    semana.forEach(function (f) {
-      var d = porDia[f]; if (!d) return;
-      d.sesiones.forEach(function (t) { tipos[t] = (tipos[t] || 0) + 1; sesiones++; });
-      if (d.gym && d.sesiones.indexOf("gym") < 0) { tipos.gym = (tipos.gym || 0) + 1; sesiones++; }
-    });
-    function mini(k, valor, unidad, nota, clase) {
-      return h("div", { class: "mini" }, h("span", { class: "k", text: k }), h("span", { class: "v" }, valor, unidad ? h("small", { text: " " + unidad }) : null), h("span", { class: "n " + (clase || ""), text: nota }));
+    if (sec === "energia") {
+      if (!conComida.length) raiz.appendChild(sinDatos("Gastado vs consumido"));
+      else {
+        var ptsVs = [], lineaG = [], maxV = 0;
+        diasF.forEach(function (f) {
+          var d = porDia[f] || VACIO_DIA, g = base + d.ejercicio;
+          lineaG.push({ i: indice[f], v: g }); maxV = Math.max(maxV, g);
+          if (!d.comidas) return;
+          maxV = Math.max(maxV, d.kcal);
+          var bal = d.kcal - g;
+          ptsVs.push({ i: indice[f], v: d.kcal, color: COLOR.verde,
+            txt: fechaLarga(f) + " · comiste " + fmt(d.kcal) + " · gastaste " + fmt(g) + (d.ejercicio ? " (ejercicio " + fmt(d.ejercicio) + ")" : "") + " · " + (bal <= 0 ? "déficit " : "superávit ") + kcalF(bal) });
+        });
+        var mVs = marcasDe(0, maxV * 1.05, 4);
+        raiz.appendChild(tarjetaGraf("Gastado vs consumido", "Barras: lo que comiste · Línea: lo que gastaste (mantenimiento " + fmt(base) + " + ejercicio)", [
+          grafica({ tipo: "barras", n: N, puntos: ptsVs, linea: lineaG, min: 0, max: Math.max(mVs[mVs.length - 1], maxV * 1.05), marcas: mVs, fechas: ejeX, izq: 40,
+            resumen: "Consumido promedio " + fmt(C.consumidoDia) + ", gastado promedio " + fmt(C.gastadoDia) }),
+          leyenda([[COLOR.verde, "Consumido"], [COLOR.tinta, "Gastado", "linea"]])]));
+
+        var ptsB = conComida.map(function (f) {
+          var d = porDia[f], bal = d.kcal - (base + d.ejercicio);
+          return { i: indice[f], v: bal, color: bal <= 0 ? COLOR.deficit : COLOR.ambar, txt: fechaLarga(f) + ": " + (bal <= 0 ? "déficit " : "superávit ") + kcalF(bal) + " kcal" };
+        });
+        var absMax = Math.max(defMax * 1.5, Math.max.apply(null, ptsB.map(function (q) { return Math.abs(q.v); })) * 1.1);
+        var mB = marcasDe(-absMax, absMax, 4);
+        var enMeta = ptsB.filter(function (q) { return -q.v >= defMin && -q.v <= defMax; }).length;
+        raiz.appendChild(tarjetaGraf("Balance diario", "Abajo de la línea = déficit (bajas grasa) · arriba = superávit", [
+          h("div", { class: "grande" }, ptsB.filter(function (q) { return q.v <= 0; }).length + " de " + ptsB.length, " ", h("small", { text: "días en déficit · " + enMeta + " en tu meta" })),
+          grafica({ tipo: "barras", n: N, puntos: ptsB, min: -absMax, max: absMax, marcas: mB, banda: [-defMax, -defMin], cero: true, fechas: ejeX, izq: 40, fmtEje: ejeKcal,
+            resumen: "Balance diario: " + enMeta + " días en tu meta de déficit" }),
+          leyenda([[COLOR.deficit, "Déficit"], [COLOR.ambar, "Superávit"], [COLOR.banda, "Tu meta: −" + fmt(defMin) + " a −" + fmt(defMax), "borde"]])]));
+
+        var acu = 0, ptsA = conComida.map(function (f) {
+          var d = porDia[f]; acu += d.kcal - (base + d.ejercicio);
+          return { x: (indice[f] + 0.5) / N, v: acu, txt: "Hasta el " + corta(f) + ": " + kcalF(acu) + " kcal (≈ " + fmt(Math.abs(acu) / 7700, 1) + " kg)" };
+        });
+        var vals = ptsA.map(function (q) { return q.v; }).concat([0]);
+        var mnA = Math.min.apply(null, vals), mxA = Math.max.apply(null, vals), padA = Math.max(200, (mxA - mnA) * 0.12);
+        var mA = marcasDe(mnA - padA, mxA + padA, 4);
+        raiz.appendChild(tarjetaGraf("Balance acumulado", "Cómo se va sumando tu déficit en el periodo", [
+          grafica({ tipo: "linea", puntos: ptsA, min: Math.min(mA[0], mnA - padA), max: Math.max(mA[mA.length - 1], mxA + padA), marcas: mA, unir: true, area: true, cero: true, color: COLOR.cintura, alto: 140, izq: 44,
+            fmtEje: ejeKcal, fechas: ejeX, etiquetaFinal: kcalF(acu) + " kcal", resumen: "Balance acumulado " + kcalF(acu) + " kcal", sinPuntos: ptsA.length > 20 })]));
+      }
     }
-    raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Esta semana" }), h("span", { text: corta(lunes) + " – " + corta(sumarDias(lunes, 6)) })));
-    raiz.appendChild(h("div", { class: "cuatro" },
-      kcalProm === null ? mini("Calorías promedio", "—", "", "Sin comidas aún", "") :
-        mini("Calorías promedio", fmt(kcalProm), "/ " + fmt(metaProm), kcalProm <= metaProm ? "✓ dentro de tu meta" : "▲ " + fmt(kcalProm - metaProm) + " sobre la meta", kcalProm <= metaProm ? "bien" : "ojo"),
-      mini("Proteína en meta", String(diasProt), "de " + conComida.length + (conComida.length === 1 ? " día" : " días"),
-        !conComida.length ? "Sin comidas aún" : diasProt === conComida.length ? "✓ todos los días" : "▲ " + (conComida.length - diasProt) + (conComida.length - diasProt === 1 ? " día corto" : " días cortos"), diasProt === conComida.length && conComida.length ? "bien" : "ojo"),
-      mini("Sueño promedio", suenoProm === null ? "—" : fmt(suenoProm, 1), suenoProm === null ? "" : "h", suenoProm === null ? "Sin registrar" : suenoProm >= 8 ? "✓ meta 8 h" : "▲ meta 8 h", suenoProm !== null && suenoProm >= 8 ? "bien" : "ojo"),
-      mini("Entrenamientos", String(sesiones), "", sesiones ? Object.keys(tipos).map(function (t) { return tipos[t] + " " + t; }).join(" · ") : "Ninguno aún", "")));
 
-    // --- Medición trimestral: peso y cintura
-    var med = medicion();
+    if (sec === "nutricion") {
+      if (!conComida.length) raiz.appendChild(sinDatos("Nutrición"));
+      else {
+        var ptsP = conComida.map(function (f) {
+          var d = porDia[f];
+          return { i: indice[f], v: d.prot, color: d.prot < protMin ? COLOR.ambar : COLOR.tinta, txt: fechaLarga(f) + ": " + fmt(d.prot) + " g de proteína" + (d.prot < protMin ? " (faltaron " + fmt(protMin - d.prot) + " g)" : "") };
+        });
+        var maxP = Math.max(protMax * 1.1, Math.max.apply(null, ptsP.map(function (q) { return q.v; })) * 1.05);
+        raiz.appendChild(tarjetaGraf("Proteína por día", "Franja verde: " + fmt(protMin) + " a " + fmt(protMax) + " g", [
+          h("div", { class: "grande" }, C.diasProt + " de " + C.registrados, " ", h("small", { text: "días en la meta · promedio " + fmt(C.protDia) + " g" })),
+          grafica({ tipo: "barras", n: N, puntos: ptsP, min: 0, max: maxP, marcas: [0, 50, 100, protMin, protMax].filter(function (v, i, a) { return a.indexOf(v) === i && v <= maxP; }).sort(function (a, b) { return a - b; }), banda: [protMin, protMax], fechas: ejeX, resumen: C.diasProt + " de " + C.registrados + " días con la proteína en la meta" }),
+          leyenda([[COLOR.tinta, "En la meta"], [COLOR.ambar, "Te faltó"], [COLOR.banda, "Meta", "borde"]])]));
+
+        var kP = C.protDia * 4, kC = C.carbDia * 4, kG = C.graDia * 9, kT = kP + kC + kG || 1;
+        var macros = [["Proteína", C.protDia, kP / kT, COLOR.tinta], ["Carbos", C.carbDia, kC / kT, COLOR.verde], ["Grasa", C.graDia, kG / kT, COLOR.ambar]];
+        raiz.appendChild(tarjetaGraf("Reparto de macros", "Promedio por día y qué parte de tus calorías viene de cada uno", [
+          h("div", { class: "macro", role: "img", "aria-label": macros.map(function (x) { return x[0] + " " + Math.round(x[2] * 100) + "%"; }).join(", ") },
+            macros.map(function (x) { return h("div", { style: "width:" + (x[2] * 100).toFixed(1) + "%;background:" + x[3] }); })),
+          h("div", { class: "filas" }, macros.map(function (x) {
+            return h("div", { class: "r" }, h("span", {}, h("i", { class: "pt", style: "background:" + x[3] }), x[0]), h("b", { text: fmt(x[1]) + " g" }), h("span", { text: Math.round(x[2] * 100) + "%" }));
+          }))]));
+
+        var tiposC = ["desayuno", "almuerzo", "cena", "snack"].filter(function (t) { return C.porTipo[t]; });
+        Object.keys(C.porTipo).forEach(function (t) { if (tiposC.indexOf(t) < 0) tiposC.push(t); });
+        var totC = C.consumido || 1, maxT = Math.max.apply(null, tiposC.map(function (t) { return C.porTipo[t]; }));
+        raiz.appendChild(tarjetaGraf("Calorías por comida", "Promedio por día con comidas registradas", [
+          h("div", { class: "filas" }, tiposC.map(function (t) {
+            return h("div", { class: "r r3" }, h("span", { text: cap(t) }),
+              h("div", { class: "t" }, h("div", { style: "width:" + (C.porTipo[t] / maxT * 100).toFixed(1) + "%;background:" + COLOR.verde })),
+              h("span", { text: fmt(C.porTipo[t] / C.registrados) + " · " + Math.round(C.porTipo[t] / totC * 100) + "%" }));
+          }))]));
+      }
+    }
+
+    if (sec === "entreno") {
+      var tiposE = Object.keys(C.tipos).sort(function (a, b) { return C.tipos[b].n - C.tipos[a].n; });
+      if (!tiposE.length) raiz.appendChild(sinDatos("Entrenamientos", "No hay entrenamientos con este filtro."));
+      else {
+        var maxN = Math.max.apply(null, tiposE.map(function (t) { return C.tipos[t].n; }));
+        raiz.appendChild(tarjetaGraf("Sesiones por tipo", C.sesiones + " sesiones · " + fmt(C.quemado) + " kcal quemadas", [
+          h("div", { class: "filas" }, tiposE.map(function (t) {
+            return h("div", { class: "r r3" }, h("span", { text: cap(t) }),
+              h("div", { class: "t" }, h("div", { style: "width:" + (C.tipos[t].n / maxN * 100).toFixed(1) + "%;background:" + COLOR.tinta })),
+              h("span", { text: C.tipos[t].n + " · " + fmt(C.tipos[t].kcal) + " kcal" }));
+          }))]));
+        var ptsQ = diasF.filter(function (f) { return porDia[f] && porDia[f].ejercicio > 0; }).map(function (f) {
+          var d = porDia[f];
+          return { i: indice[f], v: d.ejercicio, color: COLOR.verde, txt: fechaLarga(f) + ": " + fmt(d.ejercicio) + " kcal · " + d.sesiones.map(function (s) { return s.tipo; }).join(", ") };
+        });
+        if (ptsQ.length) {
+          var maxQ = Math.max.apply(null, ptsQ.map(function (q) { return q.v; })) * 1.1, mQ = marcasDe(0, maxQ, 3);
+          raiz.appendChild(tarjetaGraf("Calorías quemadas por día", null, [
+            grafica({ tipo: "barras", n: N, puntos: ptsQ, min: 0, max: Math.max(maxQ, mQ[mQ.length - 1]), marcas: mQ, fechas: ejeX, alto: 130, resumen: fmt(C.quemado) + " kcal quemadas en ejercicio" })]));
+        }
+      }
+      raiz.appendChild(tarjetaFuerza(R, diasF, ejeX));
+    }
+
+    if (sec === "cuerpo") {
+      var med = medicion();
+      raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Medición trimestral" }),
+        h("span", { text: !med.fecha ? "" : med.toca ? "Ya toca medir" : "Próxima en " + med.faltan + " días" })));
+      raiz.appendChild(graficaMedida(med, "peso_kg", "Peso", "kg", COLOR.tinta));
+      raiz.appendChild(graficaMedida(med, "cintura_cm", "Cintura", "cm", COLOR.cintura));
+      if (med.toca && med.fecha) raiz.appendChild(h("button", { class: "btn lima", text: "Registrar medición", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
+      var ptsS = diasF.filter(function (f) { return porDia[f] && porDia[f].sueno !== null; }).map(function (f) {
+        var d = porDia[f];
+        return { i: indice[f], v: d.sueno, color: d.sueno < 6.5 ? COLOR.azulClaro : COLOR.azul, txt: fechaLarga(f) + ": " + fmt(d.sueno, 1) + " h de sueño" };
+      });
+      if (ptsS.length) {
+        raiz.appendChild(tarjetaGraf("Sueño", "Horas por noche · línea en 8 h", [
+          h("div", { class: "grande" }, fmt(C.suenoProm, 1) + " h", " ", h("small", { class: C.suenoProm >= 8 ? "bien" : "ojo", text: "promedio" })),
+          grafica({ tipo: "barras", n: N, puntos: ptsS, min: 0, max: Math.max(10, Math.ceil(Math.max.apply(null, ptsS.map(function (q) { return q.v; })))), marcas: [0, 4, 6, 8, 10], lineaFija: 8, fechas: ejeX, alto: 130, resumen: "Sueño promedio " + fmt(C.suenoProm, 1) + " horas" }),
+          leyenda([[COLOR.azul, "6,5 h o más"], [COLOR.azulClaro, "Noche corta"], [COLOR.tinta, "8 h", "linea"]])]));
+      } else raiz.appendChild(sinDatos("Sueño", "Sin registros de sueño con este filtro."));
+    }
+
+    raiz.appendChild(navegacion("progreso"));
+  }
+
+  function graficaMedida(med, campo, titulo, unidad, color) {
     var desdeMed = med.lista.length ? med.lista[0].fecha : hoy;
     var spanMed = Math.max(1, (deISO(hoy) - deISO(desdeMed)) / 86400000);
     var xMed = function (f) { return med.lista.length < 2 ? 0.5 : Math.min(1, (deISO(f) - deISO(desdeMed)) / 86400000 / spanMed); };
-    function graficaMedida(campo, titulo, unidad, color) {
-      var pts = med.lista.filter(function (x) { return !vacio(x[campo]); }).map(function (x) {
-        return { x: xMed(x.fecha), v: Number(x[campo]), txt: corta(x.fecha) + " " + deISO(x.fecha).getFullYear() + ": " + fmt(x[campo], 1) + " " + unidad };
-      });
-      if (!pts.length) return tarjetaGraf(titulo, "Aún no hay mediciones.", h("button", { class: "btn lima", text: "Medir ahora", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
-      var u = pts[pts.length - 1], ant = pts.length > 1 ? pts[pts.length - 2] : null;
-      var vals = pts.map(function (p) { return p.v; });
-      var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), pad = Math.max(0.5, (mx - mn) * 0.25);
-      var marcas = marcasDe(mn - pad, mx + pad, 3);
-      var conFecha = med.lista.filter(function (x) { return !vacio(x[campo]); });
-      var cambio = ant ? h("div", { class: "grande" }, signo(u.v - ant.v, 1, unidad), " ", h("small", { class: (u.v - ant.v) <= 0 ? "bien" : "ojo", text: "desde " + corta(conFecha[conFecha.length - 2].fecha) }))
-        : h("div", { class: "grande" }, fmt(u.v, 1) + " " + unidad, " ", h("small", { text: "primera medición" }));
-      return tarjetaGraf(titulo, pts.length < 2 ? "Con tu próxima medición verás la línea." : null, [cambio,
-        grafica({ tipo: "linea", puntos: pts, min: marcas[0] - (marcas[1] - marcas[0]) * 0.3, max: marcas[marcas.length - 1] + (marcas[1] - marcas[0]) * 0.3, marcas: marcas, unir: true, color: color, alto: 120,
-          fmtEje: function (t) { return fmt(t, 1); }, etiquetaFinal: fmt(u.v, 1) + " " + unidad, resumen: titulo + ": última " + fmt(u.v, 1) + " " + unidad,
-          fechas: pts.length > 1 ? [[0, corta(desdeMed)], [1, corta(med.lista[med.lista.length - 1].fecha)]] : [] })]);
-    }
-    raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Medición trimestral" }),
-      h("span", { text: !med.fecha ? "" : med.toca ? "Ya toca medir" : "Próxima en " + med.faltan + " días" })));
-    raiz.appendChild(graficaMedida("peso_kg", "Peso", "kg", COLOR.tinta));
-    raiz.appendChild(graficaMedida("cintura_cm", "Cintura", "cm", COLOR.cintura));
-    if (med.toca && med.fecha) raiz.appendChild(h("button", { class: "btn lima", text: "Registrar medición", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
-
-    // --- Días del periodo
-    var dias = [];
-    for (var k = periodo - 1; k >= 0; k--) dias.push(sumarDias(hoy, -k));
-    var ejeX = fechasEje(dias);
-    raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Últimos " + periodo + " días" })));
-
-    // Calorías
-    var ptsK = [];
-    dias.forEach(function (f, i) {
-      var d = porDia[f]; if (!d || !d.comidas) return;
-      var meta = metaDia(d.ejercicio);
-      ptsK.push({ i: i, v: d.kcal, meta: meta, color: d.kcal > meta ? COLOR.ambar : COLOR.verde, txt: fechaLarga(f) + ": " + fmt(d.kcal) + " kcal · meta " + fmt(meta) + (d.kcal > meta ? " (te pasaste " + fmt(d.kcal - meta) + ")" : "") });
+    var conFecha = med.lista.filter(function (x) { return !vacio(x[campo]); });
+    var pts = conFecha.map(function (x) {
+      return { x: xMed(x.fecha), v: Number(x[campo]), txt: corta(x.fecha) + " " + deISO(x.fecha).getFullYear() + ": " + fmt(x[campo], 1) + " " + unidad };
     });
-    if (ptsK.length) {
-      var maxK = Math.max.apply(null, ptsK.map(function (p) { return Math.max(p.v, p.meta); }));
-      var marcasK = marcasDe(0, maxK * 1.05, 4);
-      var dentro = ptsK.filter(function (p) { return p.v <= p.meta; }).length;
-      raiz.appendChild(tarjetaGraf("Calorías por día", "La línea es tu meta de cada día (sube con el ejercicio)", [
-        h("div", { class: "grande" }, dentro + " de " + ptsK.length, " ", h("small", { text: "días dentro de la meta" })),
-        grafica({ tipo: "barras", n: dias.length, puntos: ptsK, min: 0, max: Math.max(marcasK[marcasK.length - 1], maxK * 1.05), marcas: marcasK, fechas: ejeX, resumen: dentro + " de " + ptsK.length + " días dentro de la meta de calorías" }),
-        leyenda([[COLOR.verde, "Dentro de la meta"], [COLOR.ambar, "Te pasaste"], [COLOR.tinta, "Meta", "linea"]])]));
-    } else raiz.appendChild(tarjetaGraf("Calorías por día", "Sin comidas en este periodo."));
+    if (!pts.length) return tarjetaGraf(titulo, "Aún no hay mediciones.", h("button", { class: "btn lima", text: "Medir ahora", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
+    var u = pts[pts.length - 1], ant = pts.length > 1 ? pts[pts.length - 2] : null;
+    var vals = pts.map(function (q) { return q.v; });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), pad = Math.max(0.5, (mx - mn) * 0.25);
+    var marcas = marcasDe(mn - pad, mx + pad, 3);
+    var cambio = ant ? h("div", { class: "grande" }, signo(u.v - ant.v, 1, unidad), " ", h("small", { class: (u.v - ant.v) <= 0 ? "bien" : "ojo", text: "desde " + corta(conFecha[conFecha.length - 2].fecha) }))
+      : h("div", { class: "grande" }, fmt(u.v, 1) + " " + unidad, " ", h("small", { text: "primera medición" }));
+    return tarjetaGraf(titulo, pts.length < 2 ? "Con tu próxima medición verás la línea." : null, [cambio,
+      grafica({ tipo: "linea", puntos: pts, min: Math.min(marcas[0], mn - pad / 2), max: Math.max(marcas[marcas.length - 1], mx + pad / 2), marcas: marcas, unir: true, color: color, alto: 120,
+        fmtEje: function (t) { return fmt(t, 1); }, etiquetaFinal: fmt(u.v, 1) + " " + unidad, resumen: titulo + ": última " + fmt(u.v, 1) + " " + unidad,
+        fechas: pts.length > 1 ? [[0, corta(desdeMed)], [1, corta(med.lista[med.lista.length - 1].fecha)]] : [] })]);
+  }
 
-    // Proteína
-    var ptsP = [];
-    dias.forEach(function (f, i) {
-      var d = porDia[f]; if (!d || !d.comidas) return;
-      ptsP.push({ i: i, v: d.prot, color: d.prot < protMin ? COLOR.ambar : COLOR.tinta, txt: fechaLarga(f) + ": " + fmt(d.prot) + " g de proteína" + (d.prot < protMin ? " (faltaron " + fmt(protMin - d.prot) + " g)" : "") });
-    });
-    if (ptsP.length) {
-      var maxP = Math.max(protMax * 1.1, Math.max.apply(null, ptsP.map(function (p) { return p.v; })) * 1.05);
-      var enMeta = ptsP.filter(function (p) { return p.v >= protMin; }).length;
-      raiz.appendChild(tarjetaGraf("Proteína por día", "Franja verde: " + fmt(protMin) + " a " + fmt(protMax) + " g", [
-        h("div", { class: "grande" }, enMeta + " de " + ptsP.length, " ", h("small", { text: "días en la meta" })),
-        grafica({ tipo: "barras", n: dias.length, puntos: ptsP, min: 0, max: maxP, marcas: [0, 50, 100, protMin, protMax].filter(function (v, i, a) { return a.indexOf(v) === i && v <= maxP; }).sort(function (a, b) { return a - b; }), banda: [protMin, protMax], fechas: ejeX, resumen: enMeta + " de " + ptsP.length + " días con la proteína en la meta" }),
-        leyenda([[COLOR.tinta, "En la meta"], [COLOR.ambar, "Te faltó"], [COLOR.banda, "Meta", "borde"]])]));
-    } else raiz.appendChild(tarjetaGraf("Proteína por día", "Sin comidas en este periodo."));
-
-    // Gym: peso máximo por sesión del ejercicio elegido
-    var enPeriodo = T.series_gym.filter(function (s) { return s.fecha && s.fecha >= dias[0] && s.fecha <= hoy && !vacio(s.peso_kg); });
+  function tarjetaFuerza(R, diasF, ejeX) {
+    var permitidos = {}; diasF.forEach(function (f) { permitidos[f] = true; });
+    var enPeriodo = estado.tablas.series_gym.filter(function (s) { return s.fecha && permitidos[s.fecha] && !vacio(s.peso_kg); });
     var cuenta = {};
     enPeriodo.forEach(function (s) { var n = String(s.ejercicio || "").trim(); if (n) cuenta[n] = (cuenta[n] || 0) + 1; });
     var nombres = Object.keys(cuenta).sort(function (a, b) { return cuenta[b] - cuenta[a]; });
-    if (nombres.length) {
-      var elegido = nombres.indexOf(estado.gymEjercicio) >= 0 ? estado.gymEjercicio : nombres[0];
-      var porFecha = {};
-      enPeriodo.filter(function (s) { return String(s.ejercicio).trim() === elegido; }).forEach(function (s) {
-        var p = Number(s.peso_kg), r = Number(s.repeticiones) || 0, a = porFecha[s.fecha];
-        if (!a || p > a.p || (p === a.p && r > a.r)) porFecha[s.fecha] = { p: p, r: r };
-      });
-      var fechasG = Object.keys(porFecha).sort();
-      var ptsG = fechasG.map(function (f) { return { x: (dias.indexOf(f) + 0.5) / dias.length, v: porFecha[f].p, txt: fechaLarga(f) + ": " + fmt(porFecha[f].p, 1) + " kg × " + fmt(porFecha[f].r) }; });
-      var valsG = ptsG.map(function (p) { return p.v; });
-      var mnG = Math.min.apply(null, valsG), mxG = Math.max.apply(null, valsG), padG = Math.max(2.5, (mxG - mnG) * 0.2);
-      var marcasG = marcasDe(Math.max(0, mnG - padG), mxG + padG, 3);
-      var primero = valsG[0], ultimo = valsG[valsG.length - 1];
-      var tendencia = ptsG.length < 2 ? "" : ultimo > primero ? "▲ subiendo" : ultimo < primero ? "▼ bajando" : "= igual";
-      raiz.appendChild(tarjetaGraf("Gym: tu fuerza", "Peso máximo de cada sesión", [
-        h("div", { class: "chips" }, nombres.slice(0, 8).map(function (n) {
-          return h("button", { type: "button", class: n === elegido ? "on" : "", text: n, onclick: function () { estado.gymEjercicio = n; pintar(); } });
-        })),
-        h("div", { class: "grande" }, ptsG.length > 1 ? fmt(primero, 1) + " → " + fmt(ultimo, 1) + " kg" : fmt(ultimo, 1) + " kg", " ", h("small", { class: ultimo >= primero ? "bien" : "ojo", text: tendencia })),
-        grafica({ tipo: "linea", puntos: ptsG, min: Math.min(marcasG[0], mnG - padG / 2), max: Math.max(marcasG[marcasG.length - 1], mxG + padG / 2), marcas: marcasG, unir: true, color: COLOR.tinta, relleno: COLOR.lima, borde: COLOR.tinta, alto: 130,
-          fmtEje: function (t) { return fmt(t, 1); }, fechas: ejeX, etiquetaFinal: fmt(ultimo, 1) + " kg × " + fmt(porFecha[fechasG[fechasG.length - 1]].r), resumen: elegido + ": de " + fmt(primero, 1) + " a " + fmt(ultimo, 1) + " kg" })]));
-    } else raiz.appendChild(tarjetaGraf("Gym: tu fuerza", "Sin series de gym en este periodo."));
-
-    // Sueño
-    var ptsS = [];
-    dias.forEach(function (f, i) {
-      var d = porDia[f]; if (!d || d.sueno === null) return;
-      ptsS.push({ i: i, v: d.sueno, color: d.sueno < 6.5 ? COLOR.azulClaro : COLOR.azul, txt: fechaLarga(f) + ": " + fmt(d.sueno, 1) + " h de sueño" });
+    if (!nombres.length) return tarjetaGraf("Gym: tu fuerza", "Sin series de gym con este filtro.");
+    var elegido = nombres.indexOf(estado.gymEjercicio) >= 0 ? estado.gymEjercicio : nombres[0];
+    var porFecha = {};
+    enPeriodo.filter(function (s) { return String(s.ejercicio).trim() === elegido; }).forEach(function (s) {
+      var pk = Number(s.peso_kg), r = Number(s.repeticiones) || 0, a = porFecha[s.fecha];
+      if (!a || pk > a.p || (pk === a.p && r > a.r)) porFecha[s.fecha] = { p: pk, r: r };
     });
-    if (ptsS.length) {
-      var prom = ptsS.reduce(function (a, p) { return a + p.v; }, 0) / ptsS.length;
-      raiz.appendChild(tarjetaGraf("Sueño", "Horas por noche · línea en 8 h", [
-        h("div", { class: "grande" }, fmt(prom, 1) + " h", " ", h("small", { class: prom >= 8 ? "bien" : "ojo", text: "promedio" })),
-        grafica({ tipo: "barras", n: dias.length, puntos: ptsS, min: 0, max: Math.max(10, Math.ceil(Math.max.apply(null, ptsS.map(function (p) { return p.v; })))), marcas: [0, 4, 6, 8, 10], lineaFija: 8, fechas: ejeX, alto: 130, resumen: "Sueño promedio " + fmt(prom, 1) + " horas" }),
-        leyenda([[COLOR.azul, "6,5 h o más"], [COLOR.azulClaro, "Noche corta"], [COLOR.tinta, "8 h", "linea"]])]));
-    } else raiz.appendChild(tarjetaGraf("Sueño", "Sin registros de sueño en este periodo."));
-
-    raiz.appendChild(navegacion("progreso"));
+    var fechasG = Object.keys(porFecha).sort();
+    var N = R.dias.length;
+    var ptsG = fechasG.map(function (f) { return { x: (R.dias.indexOf(f) + 0.5) / N, v: porFecha[f].p, txt: fechaLarga(f) + ": " + fmt(porFecha[f].p, 1) + " kg × " + fmt(porFecha[f].r) }; });
+    var valsG = ptsG.map(function (q) { return q.v; });
+    var mnG = Math.min.apply(null, valsG), mxG = Math.max.apply(null, valsG), padG = Math.max(2.5, (mxG - mnG) * 0.2);
+    var marcasG = marcasDe(Math.max(0, mnG - padG), mxG + padG, 3);
+    var primero = valsG[0], ultimo = valsG[valsG.length - 1];
+    var tendencia = ptsG.length < 2 ? "" : ultimo > primero ? "▲ subiendo" : ultimo < primero ? "▼ bajando" : "= igual";
+    return tarjetaGraf("Gym: tu fuerza", "Peso máximo de cada sesión", [
+      h("div", { class: "chips" }, nombres.slice(0, 8).map(function (n) {
+        return h("button", { type: "button", class: n === elegido ? "on" : "", text: n, onclick: function () { estado.gymEjercicio = n; pintar(); } });
+      })),
+      h("div", { class: "grande" }, ptsG.length > 1 ? fmt(primero, 1) + " → " + fmt(ultimo, 1) + " kg" : fmt(ultimo, 1) + " kg", " ", h("small", { class: ultimo >= primero ? "bien" : "ojo", text: tendencia })),
+      grafica({ tipo: "linea", puntos: ptsG, min: Math.min(marcasG[0], mnG - padG / 2), max: Math.max(marcasG[marcasG.length - 1], mxG + padG / 2), marcas: marcasG, unir: true, color: COLOR.tinta, relleno: COLOR.lima, borde: COLOR.tinta, alto: 130,
+        fmtEje: function (t) { return fmt(t, 1); }, fechas: ejeX, etiquetaFinal: fmt(ultimo, 1) + " kg × " + fmt(porFecha[fechasG[fechasG.length - 1]].r), resumen: elegido + ": de " + fmt(primero, 1) + " a " + fmt(ultimo, 1) + " kg" })]);
   }
 
   // ---------- Hojas inferiores ----------
