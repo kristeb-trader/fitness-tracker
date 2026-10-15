@@ -113,7 +113,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.hero');
       const textos = await page.locator('.plato .desc').allInnerTexts();
       assert.deepStrictEqual(textos.sort(), ['Pollo con arroz', 'Yogur griego']);
-      assert.ok((await page.innerText('.hero')).includes('64 / 130 g'));
+      const hero = await page.innerText('.hero');
+      assert.ok(/Consumido\s+800 kcal/.test(hero) && /Gastado\s+2.500 kcal/.test(hero) && hero.includes('−1.700 kcal'), hero);
+      const mac = await page.innerText('.macros');
+      assert.ok(mac.includes('64 g') && mac.includes('meta 130'), mac);
     });
     await prueba('no aparece el aviso de servicio desactualizado', async () => {
       assert.strictEqual(await page.locator('.banda').count(), 0);
@@ -123,9 +126,13 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok(gym.includes('Press banca · 2 series') && gym.includes('60 kg × 8'), gym);
       await captura(page, 'hoy');
     });
-    await prueba('el peso de ayer se muestra como último registro', async () => {
-      const t = await page.innerText('.dos');
-      assert.ok(t.includes('72,1') && t.includes('Cintura 86 cm'), t);
+    await prueba('Hoy no muestra el peso: el peso y la cintura están en Cuerpo', async () => {
+      assert.ok(!(await page.innerText('.app')).includes('72,1'));
+      await page.click('.nav [aria-label="Cuerpo"]');
+      await page.waitForSelector('.hero-cuerpo');
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Peso"))')).includes('72,1'));
+      await page.click('.nav [aria-label="Hoy"]');
+      await page.waitForSelector('.hero');
     });
     await prueba('cambiar de día y de semana no vuelve a pedir datos a Google', async () => {
       const antes = llamadas.length;
@@ -262,7 +269,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog [role=tab]:has-text("Medidas")');
       await page.fill('#f-peso_kg', '71.6');
       await page.click('dialog button:has-text("Guardar medidas")');
-      await page.waitForFunction(() => document.querySelector('.dos').innerText.includes('71,6'));
+      await page.waitForSelector('text=Medidas guardadas');
       await page.click('.fab');
       await page.click('dialog [role=tab]:has-text("Ejercicio")');
       await page.selectOption('#f-tipo', 'caminata');
@@ -278,9 +285,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.keyboard.type('7.5');
       await page.click('dialog button:has-text("Guardar medidas")');
       await page.waitForFunction(() => /7,5\s*h/.test(document.querySelector('.dos').innerText));
-      assert.ok((await page.innerText('.dos')).includes('71,6'), 'no borra el peso');
-      await page.click('.dos button.card.tocable >> nth=0');
-      await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'f-peso_kg');
+      const enc = s.hojas.medidas.filas[0], fila = s.hojas.medidas.filas.find((f) => f[0] === hoy);
+      assert.strictEqual(fila[enc.indexOf('peso_kg')], 71.6, 'no borra el peso');
+      await page.click('.dos button[aria-label="Registrar ejercicio"]');
+      await page.waitForSelector('dialog [role=tab].on:has-text("Ejercicio")');
       await page.keyboard.press('Escape');
     });
     await prueba('borrar una serie de gym desde su detalle', async () => {
@@ -351,10 +359,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await entrar(page, T);
     await page.waitForSelector('.hero');
 
-    await prueba('Hoy: la tarjeta de Medición muestra la última y cuánto falta para la próxima', async () => {
-      const t = await page.innerText('.dos');
-      assert.ok(t.includes('Medición') && t.includes('72,3') && t.includes('Cintura 86 cm') && t.includes('Próxima en 70 días'), t);
-      await captura(page, 'hoy-medicion');
+    await prueba('Cuerpo: cuántos días faltan para la próxima medición', async () => {
+      await page.click('.nav [aria-label="Cuerpo"]');
+      const t = await page.innerText('.hero-cuerpo');
+      assert.ok(t.includes('70') && t.includes('días para la próxima'), t);
+      await page.click('.nav [aria-label="Hoy"]');
+      await captura(page, 'hoy');
     });
     await prueba('repetidos: avisa en Hoy, los muestra y al confirmar deja uno de cada uno', async () => {
       await page.waitForSelector('.banda:has-text("Hay 3 registros repetidos")');
@@ -380,7 +390,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('Progreso abre en 30 días con el consolidado: balance = consumido − gastado', async () => {
       await page.click('.nav [aria-label="Progreso"]');
       await page.waitForSelector('.hero-bal');
-      assert.strictEqual(await page.innerText('.filtros .pill.on >> nth=0'), '30 d');
+      assert.strictEqual(await page.innerText('.seg .pill.on'), '30 d');
       // Cálculo esperado con los mismos datos: gastado = mantenimiento + ejercicio del día
       const metas = { kcal_base: 2500 }; // la que crea setup()
       let bal = 0, dias = 0, cons = 0;
@@ -392,78 +402,72 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const fmt = (v) => Math.round(Math.abs(v)).toLocaleString('de-DE');
       const hero = await page.innerText('.hero-bal');
       assert.ok(hero.includes((bal < 0 ? '−' : '+') + fmt(bal)), 'balance ' + bal + ' en ' + hero);
-      assert.ok(hero.includes(fmt(cons / dias)) && hero.includes('Consumido / día') && hero.includes('Gastado / día'), hero);
+      assert.ok(hero.includes(fmt(cons / dias)) && hero.includes('Comido / día') && hero.includes('Gastado / día'), hero);
       assert.ok((await page.innerText('.filtros .rango')).includes(dias + ' con comidas'));
       const kpis = await page.innerText('.kpis');
-      assert.ok(kpis.includes('Proteína promedio') && kpis.includes('Sueño promedio') && kpis.includes('Entrenamientos') && kpis.includes('Quemado en ejercicio'), kpis);
-      await captura(page, 'progreso');
-      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'progreso-energia.png'), fullPage: true });
+      assert.ok(kpis.includes('Proteína') && kpis.includes('Sueño') && kpis.includes('Entrenos') && kpis.includes('Quemado'), kpis);
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'progreso.png'), fullPage: true });
     });
-    await prueba('Energía: gastado vs consumido, balance diario y acumulado; al tocar muestra el día', async () => {
-      const g = page.locator('.graf:has(h3:text-is("Gastado vs consumido"))');
+    await prueba('1 · ¿Comí más o menos de lo que gasté?: una barra por día, responde y al tocar muestra el día', async () => {
+      const g = page.locator('.graf:has(h3:text-is("¿Comí más o menos de lo que gasté?"))');
       const n = await g.locator('rect.hit').count();
       assert.ok(n >= 25 && n <= 30, String(n));
+      assert.ok(/de \d+ días gastaste más de lo que comiste/.test(await g.locator('.resp').innerText()));
       await g.locator('rect.hit').last().click();
       const dato = await g.locator('.dato').innerText();
       assert.ok(/comiste .* gastaste .* (déficit|superávit)/.test(dato), dato);
-      assert.ok((await page.innerText('.graf:has(h3:text-is("Balance diario"))')).includes('días en déficit'));
-      assert.ok((await page.innerText('.graf:has(h3:text-is("Balance acumulado"))')).includes('kcal'));
+    });
+    await prueba('2 y 3 · déficit acumulado y calendario de proteína', async () => {
+      assert.ok((await page.innerText('.graf:has(h3:text-is("¿Cuánta grasa voy quemando?")) .resp')).includes('kg de grasa'));
+      const cal = page.locator('.graf:has(h3:text-is("¿Llegué a mi proteína cada día?"))');
+      assert.strictEqual(await cal.locator('.cal-d').count(), 30);
+      assert.ok(await cal.locator('.cal-d.mal').count() > 0 && await cal.locator('.cal-d.ok').count() > 0 && await cal.locator('.cal-d.sin').count() > 0);
+      await cal.locator('.cal-d.mal').first().click();
+      assert.ok((await cal.locator('.dato').innerText()).includes('faltaron'));
+    });
+    await prueba('4 y 5 · sueño y fuerza (elige el ejercicio)', async () => {
+      assert.ok((await page.innerText('.graf:has(h3:text-is("¿Estoy durmiendo bien?")) .resp')).includes('Promedio'));
+      const g = page.locator('.graf:has(h3:text-is("¿Estoy más fuerte?"))');
+      assert.strictEqual(await g.locator('.chips button.on').innerText(), 'Press banca');
+      assert.ok((await g.locator('.resp').innerText()).includes('Press banca: de'));
+      await g.locator('.chips button:has-text("Remo")').click();
+      await page.waitForFunction(() => document.querySelector('.chips button.on').textContent === 'Remo');
     });
     await prueba('filtro «Con entreno» y «Descanso» cambian el consolidado', async () => {
       const todos = await page.innerText('.hero-bal .big');
       await page.click('.pill:has-text("Con entreno")');
       await page.waitForSelector('.pill.on:has-text("Con entreno")');
-      const n = await page.locator('.graf:has(h3:text-is("Gastado vs consumido")) rect.hit').count();
+      const n = await page.locator('.graf:has(h3:text-is("¿Comí más o menos de lo que gasté?")) rect.hit').count();
       assert.ok(n >= 5 && n <= 11, String(n));
       assert.notStrictEqual(await page.innerText('.hero-bal .big'), todos);
+      assert.ok(await page.locator('.cal-d.fuera').count() > 0, 'los días que no entran se ven vacíos');
       await page.click('.pill:has-text("Descanso")');
       await page.waitForSelector('.pill.on:has-text("Descanso")');
       await page.click('.pill:has-text("Todos")');
     });
-    await prueba('Nutrición: proteína, reparto de macros y calorías por comida', async () => {
-      await page.click('.secciones button:has-text("Nutrición")');
-      assert.ok((await page.innerText('.graf:has(h3:text-is("Proteína por día"))')).includes('Franja verde: 130 a 160 g'));
-      const mac = await page.innerText('.graf:has(h3:text-is("Reparto de macros"))');
-      assert.ok(mac.includes('Proteína') && mac.includes('Carbos') && mac.includes('Grasa') && mac.includes('%'), mac);
-      assert.ok((await page.innerText('.graf:has(h3:text-is("Calorías por comida"))')).includes('Almuerzo'));
-      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'progreso-nutricion.png'), fullPage: true });
+    await prueba('90 días: trae de la hoja las fechas que faltan y compara con el periodo anterior', async () => {
+      const antes = llamadas.length;
+      await page.click('.pill[aria-label="90 días"]');
+      await page.waitForFunction(() => /comparado con los 90 días anteriores/.test(document.body.innerText), null, { timeout: 15000 });
+      assert.ok(llamadas.slice(antes).some((l) => l.accion === 'leer'), 'pidió las fechas que faltaban');
+      await page.click('.pill[aria-label="7 días"]');
+      await page.waitForSelector('.pill.on[aria-label="7 días"]');
+      assert.ok((await page.innerText('.nota-centro')).includes('7 días anteriores'));
     });
-    await prueba('Entreno: sesiones por tipo y fuerza por ejercicio', async () => {
-      await page.click('.secciones button:has-text("Entreno")');
-      const ses = await page.innerText('.graf:has(h3:text-is("Sesiones por tipo"))');
-      assert.ok(ses.includes('Gym') && ses.includes('Bici'), ses);
-      const g = page.locator('.graf:has(h3:text-is("Gym: tu fuerza"))');
-      assert.strictEqual(await g.locator('.chips button.on').innerText(), 'Press banca');
-      assert.ok((await g.innerText()).includes('▲ subiendo'));
-      await g.locator('.chips button:has-text("Remo")').click();
-      await page.waitForFunction(() => document.querySelector('.chips button.on').textContent === 'Remo');
-      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'progreso-entreno.png'), fullPage: true });
+    await prueba('Fechas: elegir desde y hasta a mano', async () => {
+      await page.click('.pill[aria-label="Elegir fechas"]');
+      await page.fill('#f-desde', hace(13));
+      await page.dispatchEvent('#f-desde', 'change');
+      await page.waitForFunction(() => /14 días/.test(document.querySelector('.filtros .rango').textContent));
+      await page.click('.pill[aria-label="Este mes"]');
+      await page.waitForSelector('.pill.on[aria-label="Este mes"]');
     });
-    await prueba('Cuerpo: mediciones trimestrales y sueño', async () => {
-      await page.click('.secciones button:has-text("Cuerpo")');
+    await prueba('Cuerpo: mediciones trimestrales', async () => {
+      await page.click('.nav [aria-label="Cuerpo"]');
       const peso = await page.innerText('.graf:has(h3:text-is("Peso"))');
       assert.ok(peso.includes('−0,8 kg') && peso.includes('72,3 kg'), peso);
       assert.strictEqual(await page.locator('.graf:has(h3:text-is("Peso")) circle.hit').count(), 3);
       assert.ok((await page.innerText('.graf:has(h3:text-is("Cintura"))')).includes('−1,5 cm'));
-      assert.ok((await page.innerText('.graf:has(h3:text-is("Sueño"))')).includes('promedio'));
-      await page.click('.secciones button:has-text("Energía")');
-    });
-    await prueba('90 días: trae de la hoja las fechas que faltan y compara con el periodo anterior', async () => {
-      const antes = llamadas.length;
-      await page.click('.pill:has-text("90 d")');
-      await page.waitForFunction(() => /comparado con los 90 días anteriores/.test(document.body.innerText), null, { timeout: 15000 });
-      assert.ok(llamadas.slice(antes).some((l) => l.accion === 'leer'), 'pidió las fechas que faltaban');
-      await page.click('.pill:has-text("7 d")');
-      await page.waitForSelector('.pill.on:has-text("7 d")');
-      assert.ok((await page.innerText('.nota-centro')).includes('7 días anteriores'));
-    });
-    await prueba('Fechas: eligir desde y hasta a mano', async () => {
-      await page.click('.pill:has-text("Fechas")');
-      await page.fill('#f-desde', hace(13));
-      await page.dispatchEvent('#f-desde', 'change');
-      await page.waitForFunction(() => /14 días/.test(document.querySelector('.filtros .rango').textContent));
-      await page.click('.pill:has-text("Este mes")');
-      await page.waitForSelector('.pill.on:has-text("Este mes")');
     });
     await prueba('volver a Hoy', async () => {
       await page.click('.nav [aria-label="Hoy"]');
@@ -501,14 +505,11 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const fila = s.hojas.medidas.filas.find((f) => f[0] === '2026-04-20');
       assert.strictEqual(fila[enc.indexOf('grasa_tronco_kg')], 10.5);
     });
-    await prueba('Hoy: la tarjeta Medición toma la de hoy y cuenta 90 días', async () => {
-      await page.click('.nav [aria-label="Hoy"]');
-      await page.waitForFunction(() => /Próxima en 90 días/.test(document.querySelector('.dos').innerText));
-      assert.ok((await page.innerText('.dos')).includes('Cintura 90 cm'));
+    await prueba('Cuerpo: la medición de hoy cuenta 90 días para la próxima', async () => {
+      await page.click('.nav [aria-label="Cuerpo"]');
+      await page.waitForFunction(() => /90\s*días para la próxima/.test(document.querySelector('.hero-cuerpo').innerText));
     });
     await prueba('Progreso → Cuerpo: última vs anterior con su ▲▼ y gráficas de grasa y músculo', async () => {
-      await page.click('.nav [aria-label="Progreso"]');
-      await page.click('.secciones button:has-text("Cuerpo")');
       const card = page.locator('.graf:has(h3:text-is("Última medición vs la anterior"))');
       const grasa = await card.locator('.cmp-fila:has-text("Grasa corporal")').innerText();
       assert.ok(/24\s+22,8 %\s+▼ 1,2/.test(grasa), grasa);
@@ -576,7 +577,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('la app sigue funcionando y avisa que hay que actualizar el servicio', async () => {
       await page.waitForSelector('.hero');
       await page.waitForSelector('.banda >> text=Actualiza tu servicio de Google');
-      assert.ok((await page.innerText('.carrusel')).includes('Huevos'));
+      assert.ok((await page.innerText('.lista.comidas')).includes('Huevos'));
       await captura(page, 'aviso-actualizar');
     });
     await prueba('el botón «Ver cómo» lleva a los pasos, con el estado «desactualizado»', async () => {
