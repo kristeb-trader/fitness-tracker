@@ -25,7 +25,7 @@ console.log('Instalación y contraseña');
   });
   prueba('setup se puede repetir sin duplicar las metas', () => assert.strictEqual(s.hojas.metas.getLastRow(), 6));
   prueba('la dirección del servicio responde con su versión', () => {
-    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 2);
+    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 3);
   });
   prueba('sin contraseña, con una incorrecta o con una corta: no autorizado', () => {
     assert.strictEqual(s.post({ accion: 'ping' }).error, 'No autorizado');
@@ -35,7 +35,7 @@ console.log('Instalación y contraseña');
   });
   prueba('ping devuelve la versión y si el chat con API está activo', () => {
     const r = s.post({ token: T, accion: 'ping' });
-    assert.ok(r.ok); assert.strictEqual(r.version, 2); assert.strictEqual(r.chat, false);
+    assert.ok(r.ok); assert.strictEqual(r.version, 3); assert.strictEqual(r.chat, false);
   });
   prueba('espacios sobrantes en la contraseña guardada o escrita no importan', () => {
     const e = crearServicio({ props: { TOKEN: '  clave-con-espacios-123  \n' } });
@@ -85,6 +85,22 @@ console.log('Guardar');
     assert.strictEqual(s.hojas.medidas.getLastRow(), 2);
     assert.strictEqual(json(s.hojas.medidas.filas[1].slice(0, 4)), json(['2026-10-09', 71.8, '', 7]));
     assert.ok(/al menos un dato/.test(s.post({ token: T, accion: 'medidas', fila: { fecha: '2026-10-09' } }).error));
+  });
+  prueba('medición trimestral (versión 3): guarda báscula, cinta y por zona; agrega las columnas que falten', () => {
+    const r = s.post({ token: T, accion: 'medidas', fila: { fecha: '2026-04-20', peso_kg: 79.5, grasa_pct: 22.8, masa_muscular_kg: 34.6, magra_tronco_kg: 29.9, grasa_pierna_der_kg: 1.8 } });
+    assert.ok(r.ok, JSON.stringify(r));
+    const enc = s.hojas.medidas.filas[0];
+    for (const c of ['grasa_pct', 'masa_muscular_kg', 'magra_tronco_kg', 'grasa_pierna_der_kg', 'pecho_cm', 'muslo_cm']) assert.ok(enc.includes(c), c);
+    // otra vez el mismo día con la cinta métrica: solo agrega lo nuevo
+    const r2 = s.post({ token: T, accion: 'medidas', fila: { fecha: '2026-04-20', pecho_cm: 102, brazo_izq_cm: 36 } });
+    assert.strictEqual(r2.actualizado, true);
+    const fila = s.hojas.medidas.filas.find((f) => f[0] === '2026-04-20');
+    const v = (c) => fila[enc.indexOf(c)];
+    assert.strictEqual(v('peso_kg'), 79.5); assert.strictEqual(v('grasa_pct'), 22.8); assert.strictEqual(v('pecho_cm'), 102); assert.strictEqual(v('magra_tronco_kg'), 29.9);
+    // la app lo lee completo
+    const leido = s.post({ token: T, accion: 'leer', desde: '2026-01-01' }).medidas.find((m) => m.fecha === '2026-04-20');
+    assert.strictEqual(leido.grasa_pct, 22.8); assert.strictEqual(leido.brazo_izq_cm, 36);
+    assert.ok(/grasa_pct es mayor que 70/.test(s.post({ token: T, accion: 'medidas', fila: { fecha: '2026-04-21', grasa_pct: 194 } }).error));
   });
   prueba('borrar quita la fila; borrar dos veces avisa', () => {
     const id = s.hojas.comidas.filas[1][0];
@@ -140,7 +156,7 @@ console.log('Leer datos que ya estaban en la hoja (lo que antes no aparecía)');
     s.ctx.probar();
     assert.strictEqual(json(s.hojas.comidas.filas), antes);
     assert.ok(s.estado.registros.some((l) => /comidas: 5 filas/.test(l)), s.estado.registros.join(' | '));
-    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 2/.test(l)));
+    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 3/.test(l)));
   });
 }
 

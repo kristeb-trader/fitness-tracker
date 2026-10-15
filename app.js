@@ -2,9 +2,39 @@
   "use strict";
 
   var VERSION_APP = 2;
-  var SERVICIO_REQUERIDO = 2; // versión de apps-script/Code.gs que espera esta app
+  var SERVICIO_REQUERIDO = 3; // versión de apps-script/Code.gs que espera esta app (3: medición trimestral completa)
   var DIAS_CARGADOS = 100;    // la app trae de una vez los últimos 100 días: cambiar de día y ver Progreso (hasta 90) es instantáneo
   var DIAS_MEDICION = 90;     // peso y cintura se miden cada 3 meses
+  // Medición trimestral: [campo, nombre, unidad, decimales, grupo, qué es mejor ("sube", "baja" o null), mín, máx]
+  var CAMPOS_MEDICION = [
+    ["peso_kg", "Peso", "kg", 1, "bascula", null, 20, 400],
+    ["grasa_pct", "Grasa corporal", "%", 1, "bascula", "baja", 2, 70],
+    ["masa_muscular_kg", "Masa muscular", "kg", 1, "bascula", "sube", 5, 150],
+    ["masa_libre_grasa_kg", "Masa libre de grasa", "kg", 1, "bascula", "sube", 10, 200],
+    ["agua_l", "Agua", "L", 1, "bascula", null, 10, 120],
+    ["grasa_visceral", "Grasa visceral", "", 1, "bascula", "baja", 0, 60],
+    ["metabolismo_basal_kcal", "Metabolismo basal", "kcal", 0, "bascula", "sube", 500, 5000],
+    ["imc", "IMC", "", 1, "bascula", null, 10, 70],
+    ["cintura_cm", "Cintura", "cm", 1, "cinta", "baja", 20, 300],
+    ["abdomen_bajo_cm", "Abdomen bajo", "cm", 1, "cinta", "baja", 20, 300],
+    ["pecho_cm", "Pecho", "cm", 1, "cinta", "sube", 20, 300],
+    ["cadera_cm", "Cadera / glúteo", "cm", 1, "cinta", null, 20, 300],
+    ["brazo_izq_cm", "Brazo izquierdo", "cm", 1, "cinta", "sube", 10, 100],
+    ["brazo_der_cm", "Brazo derecho", "cm", 1, "cinta", "sube", 10, 100],
+    ["muslo_cm", "Muslo", "cm", 1, "cinta", "sube", 20, 150],
+    ["magra_brazo_izq_kg", "Músculo brazo izq.", "kg", 2, "zona", "sube", 0, 30],
+    ["magra_brazo_der_kg", "Músculo brazo der.", "kg", 2, "zona", "sube", 0, 30],
+    ["magra_tronco_kg", "Músculo tronco", "kg", 2, "zona", "sube", 0, 100],
+    ["magra_pierna_izq_kg", "Músculo pierna izq.", "kg", 2, "zona", "sube", 0, 50],
+    ["magra_pierna_der_kg", "Músculo pierna der.", "kg", 2, "zona", "sube", 0, 50],
+    ["grasa_brazo_izq_kg", "Grasa brazo izq.", "kg", 2, "zona", "baja", 0, 30],
+    ["grasa_brazo_der_kg", "Grasa brazo der.", "kg", 2, "zona", "baja", 0, 30],
+    ["grasa_tronco_kg", "Grasa tronco", "kg", 2, "zona", "baja", 0, 100],
+    ["grasa_pierna_izq_kg", "Grasa pierna izq.", "kg", 2, "zona", "baja", 0, 50],
+    ["grasa_pierna_der_kg", "Grasa pierna der.", "kg", 2, "zona", "baja", 0, 50]
+  ];
+  var CAMPOS_V3 = CAMPOS_MEDICION.map(function (c) { return c[0]; }).filter(function (c) { return c !== "peso_kg" && c !== "cintura_cm"; });
+  function tieneMedicion(x) { return CAMPOS_MEDICION.some(function (c) { return !vacio(x[c[0]]); }); }
 
   var CFG = window.CONFIG || {};
   var MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -396,7 +426,7 @@
       var L = estado.legado || {};
       meds = [L.ultimoPeso, L.ultimaCintura].filter(Boolean).map(filaNormal);
     }
-    meds = meds.filter(function (x) { return x.fecha && x.fecha <= hoy && (!vacio(x.peso_kg) || !vacio(x.cintura_cm)); })
+    meds = meds.filter(function (x) { return x.fecha && x.fecha <= hoy && tieneMedicion(x); })
       .sort(function (x, y) { return x.fecha < y.fecha ? -1 : 1; });
     var conPeso = meds.filter(function (x) { return !vacio(x.peso_kg); });
     var conCint = meds.filter(function (x) { return !vacio(x.cintura_cm); });
@@ -912,8 +942,11 @@
       var med = medicion();
       raiz.appendChild(h("div", { class: "seccion" }, h("h2", { text: "Medición trimestral" }),
         h("span", { text: !med.fecha ? "" : med.toca ? "Ya toca medir" : "Próxima en " + med.faltan + " días" })));
+      raiz.appendChild(tarjetaComparacion(med));
       raiz.appendChild(graficaMedida(med, "peso_kg", "Peso", "kg", COLOR.tinta));
-      raiz.appendChild(graficaMedida(med, "cintura_cm", "Cintura", "cm", COLOR.cintura));
+      raiz.appendChild(graficaMedida(med, "grasa_pct", "Grasa corporal", "%", COLOR.ambar));
+      raiz.appendChild(graficaMedida(med, "masa_muscular_kg", "Masa muscular", "kg", COLOR.cintura));
+      raiz.appendChild(graficaMedida(med, "cintura_cm", "Cintura", "cm", COLOR.tinta));
       if (med.toca && med.fecha) raiz.appendChild(h("button", { class: "btn lima", text: "Registrar medición", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
       var ptsS = diasF.filter(function (f) { return porDia[f] && porDia[f].sueno !== null; }).map(function (f) {
         var d = porDia[f];
@@ -930,11 +963,48 @@
     raiz.appendChild(navegacion("progreso"));
   }
 
+  /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */
+  function tarjetaComparacion(med) {
+    var fechasGrupo = {};
+    var filas = function (grupo) {
+      return CAMPOS_MEDICION.filter(function (c) { return c[4] === grupo; }).map(function (c) {
+        var con = med.lista.filter(function (x) { return !vacio(x[c[0]]); });
+        if (!con.length) return null;
+        var u = con[con.length - 1], a = con.length > 1 ? con[con.length - 2] : null;
+        var vu = Number(u[c[0]]), va = a ? Number(a[c[0]]) : null;
+        var fg = fechasGrupo[grupo] = fechasGrupo[grupo] || { u: "", a: "" };
+        if (u.fecha > fg.u) fg.u = u.fecha;
+        if (a && a.fecha > fg.a) fg.a = a.fecha;
+        var unidad = c[2] ? " " + c[2] : "";
+        var badge = null;
+        if (a) {
+          var dl = vu - va, cero = Math.abs(dl) < Math.pow(10, -c[3]) / 2;
+          var bueno = c[5] === "sube" ? dl > 0 : c[5] === "baja" ? dl < 0 : null;
+          badge = h("span", { class: "delta" + (cero || bueno === null ? "" : bueno ? " up" : " dn"), text: cero ? "=" : (dl > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dl), c[3]) });
+        }
+        return h("div", { class: "cmp-fila" },
+          h("span", { class: "cmp-n", text: c[1] }),
+          h("span", { class: "cmp-a", text: a ? fmt(va, c[3]) : "—", title: a ? corta(a.fecha) : "" }),
+          h("span", { class: "cmp-u" }, h("b", { text: fmt(vu, c[3]) }), unidad),
+          badge || h("span", { class: "delta", text: "nuevo" }));
+      }).filter(Boolean);
+    };
+    var b = filas("bascula"), ci = filas("cinta"), z = filas("zona");
+    if (!b.length && !ci.length) return tarjetaGraf("Última medición", "Aún no hay mediciones.", h("button", { class: "btn lima", text: "Medir ahora", onclick: function () { abrirAgregar("medidas", { enfocar: "peso_kg" }); } }));
+    var conAnio = function (f) { return corta(f) + " " + String(deISO(f).getFullYear()).slice(2); };
+    var titulo = function (nombre, g) { var fg = fechasGrupo[g]; return nombre + (fg ? " · " + conAnio(fg.u) + (fg.a ? " vs " + conAnio(fg.a) : "") : ""); };
+    var cab = h("div", { class: "cmp-fila cmp-cab" }, h("span", { text: "" }), h("span", { text: "Anterior" }), h("span", { text: "Última" }), h("span", { text: "Cambio" }));
+    return tarjetaGraf("Última medición vs la anterior", "Cada dato se compara con su medición anterior. Verde = va en la dirección buena; amarillo = en la contraria.", [
+      b.length ? h("div", { class: "grupo-t", text: titulo("Báscula", "bascula") }) : null, b.length ? h("div", { class: "cmp" }, cab, b) : null,
+      ci.length ? h("div", { class: "grupo-t", text: titulo("Cinta métrica", "cinta") }) : null, ci.length ? h("div", { class: "cmp" }, cab.cloneNode(true), ci) : null,
+      z.length ? h("details", { class: "avanzado" }, h("summary", { text: titulo("Por zona (músculo y grasa)", "zona") }), h("div", { class: "cmp" }, cab.cloneNode(true), z)) : null]);
+  }
+
   function graficaMedida(med, campo, titulo, unidad, color) {
-    var desdeMed = med.lista.length ? med.lista[0].fecha : hoy;
-    var spanMed = Math.max(1, (deISO(hoy) - deISO(desdeMed)) / 86400000);
-    var xMed = function (f) { return med.lista.length < 2 ? 0.5 : Math.min(1, (deISO(f) - deISO(desdeMed)) / 86400000 / spanMed); };
     var conFecha = med.lista.filter(function (x) { return !vacio(x[campo]); });
+    var desdeMed = conFecha.length ? conFecha[0].fecha : hoy, hastaMed = conFecha.length ? conFecha[conFecha.length - 1].fecha : hoy;
+    var spanMed = Math.max(1, (deISO(hastaMed) - deISO(desdeMed)) / 86400000);
+    var xMed = function (f) { return conFecha.length < 2 ? 0.5 : Math.min(1, (deISO(f) - deISO(desdeMed)) / 86400000 / spanMed); };
     var pts = conFecha.map(function (x) {
       return { x: xMed(x.fecha), v: Number(x[campo]), txt: corta(x.fecha) + " " + deISO(x.fecha).getFullYear() + ": " + fmt(x[campo], 1) + " " + unidad };
     });
@@ -943,12 +1013,14 @@
     var vals = pts.map(function (q) { return q.v; });
     var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), pad = Math.max(0.5, (mx - mn) * 0.25);
     var marcas = marcasDe(mn - pad, mx + pad, 3);
-    var cambio = ant ? h("div", { class: "grande" }, signo(u.v - ant.v, 1, unidad), " ", h("small", { class: (u.v - ant.v) <= 0 ? "bien" : "ojo", text: "desde " + corta(conFecha[conFecha.length - 2].fecha) }))
+    var def = CAMPOS_MEDICION.filter(function (c) { return c[0] === campo; })[0] || [];
+    var dl = ant ? u.v - ant.v : 0, bueno = def[5] === "sube" ? dl > 0 : def[5] === "baja" ? dl < 0 : null;
+    var cambio = ant ? h("div", { class: "grande" }, signo(dl, 1, unidad), " ", h("small", { class: bueno === null || Math.abs(dl) < 0.05 ? "" : bueno ? "bien" : "ojo", text: "desde " + corta(conFecha[conFecha.length - 2].fecha) }))
       : h("div", { class: "grande" }, fmt(u.v, 1) + " " + unidad, " ", h("small", { text: "primera medición" }));
     return tarjetaGraf(titulo, pts.length < 2 ? "Con tu próxima medición verás la línea." : null, [cambio,
       grafica({ tipo: "linea", puntos: pts, min: Math.min(marcas[0], mn - pad / 2), max: Math.max(marcas[marcas.length - 1], mx + pad / 2), marcas: marcas, unir: true, color: color, alto: 120,
         fmtEje: function (t) { return fmt(t, 1); }, etiquetaFinal: fmt(u.v, 1) + " " + unidad, resumen: titulo + ": última " + fmt(u.v, 1) + " " + unidad,
-        fechas: pts.length > 1 ? [[0, corta(desdeMed)], [1, corta(med.lista[med.lista.length - 1].fecha)]] : [] })]);
+        fechas: pts.length > 1 ? [[0, corta(desdeMed)], [1, corta(hastaMed)]] : [] })]);
   }
 
   function tarjetaFuerza(R, diasF, ejeX) {
@@ -1062,25 +1134,37 @@
     var ya = vistaDia().medida || {};
     var val = function (k) { return vacio(ya[k]) ? "" : String(ya[k]); };
     var btn = h("button", { class: "btn lima", type: "submit", text: "Guardar medidas" });
+    var numero = function (c) {
+      return campo(c[1] + (c[2] ? " (" + c[2] + ")" : ""), c[0], { attrs: { type: "number", min: c[6], max: c[7], step: c[3] === 2 ? 0.01 : c[3] === 1 ? 0.1 : 1, inputmode: "decimal" }, valor: val(c[0]) });
+    };
+    var grupo = function (g) { return h("div", { class: "grid2" }, CAMPOS_MEDICION.filter(function (c) { return c[4] === g; }).map(numero)); };
+    var viejo = estado.version !== null && estado.version < 3;
     var f = h("form", { novalidate: true },
       campo("Fecha", "fecha", { attrs: { type: "date", required: true, max: hoy }, valor: estado.fecha }),
       h("h4", { class: "subtitulo", text: "Sueño (cada día)" }),
       campo("Horas de sueño", "horas_sueno", { attrs: { type: "number", min: 0, max: 24, step: 0.1, inputmode: "decimal" }, valor: val("horas_sueno") }),
       h("h4", { class: "subtitulo", text: "Medición trimestral (cada 3 meses)" }),
-      h("p", { class: "ayuda", text: (function () { var md = medicion(); return md.fecha ? "Última: " + corta(md.fecha) + (md.toca ? ". Ya toca medir." : ". Próxima en " + md.faltan + " días.") : "Aún no tienes mediciones."; })() + " Mide en ayunas, al levantarte." }),
-      h("div", { class: "grid2" },
-        campo("Peso (kg)", "peso_kg", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" }, valor: val("peso_kg") }),
-        campo("Cintura (cm)", "cintura_cm", { attrs: { type: "number", min: 20, step: 0.1, inputmode: "decimal" }, valor: val("cintura_cm") })),
+      h("p", { class: "ayuda", text: (function () { var md = medicion(); return md.fecha ? "Última: " + corta(md.fecha) + (md.toca ? ". Ya toca medir." : ". Próxima en " + md.faltan + " días.") : "Aún no tienes mediciones."; })() + " Llena solo lo que tengas." }),
+      viejo ? h("p", { class: "ayuda ojo", text: "Para guardar algo más que peso y cintura, primero actualiza tu servicio de Google (Ajustes → Actualiza tu servicio)." }) : null,
+      h("div", { class: "grupo-t", text: "Báscula (bioimpedancia)" }), grupo("bascula"),
+      h("div", { class: "grupo-t", text: "Cinta métrica" }), grupo("cinta"),
+      h("details", { class: "avanzado" }, h("summary", { text: "Por zona (músculo y grasa de cada brazo, pierna y tronco)" }), grupo("zona")),
       btn);
     if (opc.enfocar) setTimeout(function () { var el = f.querySelector('[name="' + opc.enfocar + '"]'); if (el) { el.focus(); if (el.select) el.select(); } }, 60);
     f.addEventListener("submit", function (e) {
       e.preventDefault();
-      var fila = leerForm(f, ["peso_kg", "cintura_cm", "horas_sueno"]);
-      if (fila.peso_kg === null && fila.cintura_cm === null && fila.horas_sueno === null) return aviso("Escribe al menos un dato.", true);
+      var nums = ["horas_sueno"].concat(CAMPOS_MEDICION.map(function (c) { return c[0]; }));
+      var fila = leerForm(f, nums);
+      if (nums.every(function (k) { return fila[k] === null; })) return aviso("Escribe al menos un dato.", true);
+      if (viejo && CAMPOS_V3.some(function (k) { return fila[k] !== null; })) return aviso("Primero actualiza tu servicio de Google: si no, esos datos no se guardan.", true);
+      var mal = CAMPOS_MEDICION.filter(function (c) { return fila[c[0]] !== null && (fila[c[0]] < c[6] || fila[c[0]] > c[7]); })[0];
+      if (mal) return aviso(mal[1] + ": revisa el número (entre " + c6(mal) + ").", true);
       enviar(f, btn, function () { return api("medidas", { fila: fila }); }, "Medidas guardadas");
     });
+    function c6(c) { return fmt(c[6]) + " y " + fmt(c[7]); }
     return f;
   }
+
 
   function formEjercicio() {
     var btn = h("button", { class: "btn lima", type: "submit", text: "Guardar ejercicio" });
@@ -1178,6 +1262,7 @@
       "Formato de cada registro (usa solo los campos que corresponden; hora HH:MM opcional):",
       '{"tabla":"comidas","hora":"13:30","tipo_comida":"almuerzo","descripcion":"Pollo, arroz y ensalada","kcal":620,"proteina_g":46,"carbos_g":60,"grasa_g":12,"estimado":true}',
       '{"tabla":"medidas","peso_kg":72.4,"cintura_cm":85.5,"horas_sueno":7}',
+      'Medición trimestral (en la misma "tabla":"medidas", con "fecha"; usa solo los campos que te dé): grasa_pct, masa_muscular_kg, masa_libre_grasa_kg, agua_l, grasa_visceral, metabolismo_basal_kcal, imc, abdomen_bajo_cm, pecho_cm, cadera_cm, brazo_izq_cm, brazo_der_cm, muslo_cm, y por zona magra_/grasa_ + brazo_izq_kg, brazo_der_kg, tronco_kg, pierna_izq_kg, pierna_der_kg (por ejemplo magra_tronco_kg).',
       '{"tabla":"ejercicio","tipo":"caminata","duracion_min":40,"kcal":210,"fuente":"estimado","notas":""}',
       '{"tabla":"series_gym","rutina":"Pecho","ejercicio":"Press banca","numero_serie":1,"peso_kg":60,"repeticiones":8}',
       "",
@@ -1201,11 +1286,13 @@
     comidas: { kcal: [0, 10000], proteina_g: [0, 1000], carbos_g: [0, 1500], grasa_g: [0, 1000] },
     ejercicio: { duracion_min: [1, 1440], kcal: [0, 10000] },
     series_gym: { numero_serie: [1, 100, true], peso_kg: [0, 1000], repeticiones: [1, 1000, true] },
-    medidas: { peso_kg: [20, 400], cintura_cm: [20, 300], horas_sueno: [0, 24] }
+    medidas: { horas_sueno: [0, 24] }
   };
+  CAMPOS_MEDICION.forEach(function (c) { RANGOS.medidas[c[0]] = [c[6], c[7]]; });
   var NOMBRES = { kcal: "calorías", proteina_g: "proteína", carbos_g: "carbos", grasa_g: "grasa", duracion_min: "duración", numero_serie: "número de serie",
     peso_kg: "peso", repeticiones: "repeticiones", cintura_cm: "cintura", horas_sueno: "horas de sueño",
     tipo_comida: "tipo de comida", tipo: "tipo de ejercicio", fuente: "fuente", descripcion: "descripción", rutina: "rutina", ejercicio: "ejercicio", fecha: "fecha" };
+  CAMPOS_MEDICION.forEach(function (c) { if (c[0] !== "peso_kg") NOMBRES[c[0]] = c[1].toLowerCase(); });
   function aNumero(v) { return typeof v === "number" ? v : Number(String(v).replace(",", ".").replace(/[^\d.\-]/g, "")); }
   /** Lo mismo que revisa el servicio de Google, para avisar antes de guardar. */
   function problemaDatos(r) {
@@ -1268,16 +1355,22 @@
     var n = function (v) { return vacio(v) ? "?" : fmt(v, 1); };
     var problema = !/^\d{4}-\d{2}-\d{2}$/.test(r.fecha) ? "fecha no válida" : r.fecha > hoy ? "fecha futura" : problemaDatos(r);
     var cuando = r.fecha !== estado.fecha && !problema ? " · " + corta(r.fecha) : "";
-    var d;
+    var d, problemaServicio = "";
     if (r.tabla === "comidas") d = { ok: !!(r.tipo_comida && r.descripcion), texto: cap(r.tipo_comida || "?") + ": " + String(r.descripcion || "?") + " · " + n(r.kcal) + " kcal · " + n(r.proteina_g) + " g proteína" + (r.estimado === true || r.estimado === "true" ? " (estimado)" : "") };
     else if (r.tabla === "medidas") {
       var p = [];
       if (!vacio(r.peso_kg)) p.push(n(r.peso_kg) + " kg");
       if (!vacio(r.cintura_cm)) p.push("cintura " + n(r.cintura_cm) + " cm");
+      if (!vacio(r.grasa_pct)) p.push("grasa " + n(r.grasa_pct) + " %");
+      if (!vacio(r.masa_muscular_kg)) p.push("músculo " + n(r.masa_muscular_kg) + " kg");
       if (!vacio(r.horas_sueno)) p.push(n(r.horas_sueno) + " h de sueño");
+      var otros = CAMPOS_V3.filter(function (c) { return c !== "grasa_pct" && c !== "masa_muscular_kg" && !vacio(r[c]); }).length;
+      if (otros) p.push("+" + otros + (otros === 1 ? " dato más" : " datos más"));
       d = { ok: p.length > 0, texto: "Medidas: " + (p.join(" · ") || "sin datos") };
+      if (estado.version !== null && estado.version < 3 && CAMPOS_V3.some(function (c) { return !vacio(r[c]); })) problemaServicio = "primero actualiza tu servicio de Google (Ajustes)";
     } else if (r.tabla === "ejercicio") d = { ok: !!r.tipo, texto: "Ejercicio: " + cap(r.tipo || "?") + (r.duracion_min ? " · " + n(r.duracion_min) + " min" : "") + (vacio(r.kcal) ? "" : " · " + n(r.kcal) + " kcal") };
     else d = { ok: !!(r.ejercicio && r.numero_serie), texto: "Gym: " + String(r.ejercicio || "?") + " · serie " + n(r.numero_serie) + ": " + n(r.peso_kg) + " kg × " + n(r.repeticiones) };
+    problema = problema || problemaServicio;
     if (problema) { d.ok = false; d.texto += " (" + problema + ")"; }
     d.texto += cuando;
     return d;

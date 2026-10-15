@@ -293,12 +293,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.nav [aria-label="Ajustes"]');
       await page.waitForSelector('dialog >> text=Mis metas');
       await captura(page, 'ajustes-simple');
-      assert.ok(!(await page.innerText('dialog')).includes('versión 2'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
+      assert.ok(!(await page.innerText('dialog')).includes('versión 3'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
       await page.click('dialog summary:has-text("Opciones avanzadas")');
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('versión 2 (al día)') && t.includes('…'), t);
+      assert.ok(t.includes('versión 3 (al día)') && t.includes('…'), t);
       await page.click('dialog button:has-text("Copiar código del servicio")');
-      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 2'));
+      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 3'));
       await captura(page, 'ajustes');
     });
     await prueba('cambiar la dirección del servicio desde la app (sin tocar GitHub)', async () => {
@@ -468,6 +468,95 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('volver a Hoy', async () => {
       await page.click('.nav [aria-label="Hoy"]');
       await page.waitForSelector('.hero');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Medición trimestral completa (báscula, cinta métrica y por zona)');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    // Datos inventados: 2 mediciones de báscula de bioimpedancia y una con cinta métrica hoy
+    const bloque = JSON.parse(fs.readFileSync(path.join(__dirname, 'medicion-ejemplo.json'), 'utf8'));
+    bloque[2].fecha = hoy;
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+
+    await prueba('Pegar: reconoce la medición completa y la guarda', async () => {
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', JSON.stringify(bloque));
+      await page.click('dialog button:has-text("Revisar")');
+      await page.waitForSelector('dialog button:has-text("Guardar 3 registros")');
+      const v = await page.innerText('dialog .lista');
+      assert.ok(v.includes('81 kg · grasa 24 % · músculo 35 kg · +15 datos más'), v);
+      assert.ok(v.includes('cintura 90 cm · +6 datos más'), v);
+      await page.click('dialog button:has-text("Guardar 3 registros")');
+      await page.waitForSelector('text=3 registros guardados', { timeout: 15000 });
+      const enc = s.hojas.medidas.filas[0];
+      const fila = s.hojas.medidas.filas.find((f) => f[0] === '2026-04-20');
+      assert.strictEqual(fila[enc.indexOf('grasa_tronco_kg')], 10.5);
+    });
+    await prueba('Hoy: la tarjeta Medición toma la de hoy y cuenta 90 días', async () => {
+      await page.click('.nav [aria-label="Hoy"]');
+      await page.waitForFunction(() => /Próxima en 90 días/.test(document.querySelector('.dos').innerText));
+      assert.ok((await page.innerText('.dos')).includes('Cintura 90 cm'));
+    });
+    await prueba('Progreso → Cuerpo: última vs anterior con su ▲▼ y gráficas de grasa y músculo', async () => {
+      await page.click('.nav [aria-label="Progreso"]');
+      await page.click('.secciones button:has-text("Cuerpo")');
+      const card = page.locator('.graf:has(h3:text-is("Última medición vs la anterior"))');
+      const grasa = await card.locator('.cmp-fila:has-text("Grasa corporal")').innerText();
+      assert.ok(/24\s+22,8 %\s+▼ 1,2/.test(grasa), grasa);
+      assert.ok((await card.locator('.cmp-fila:has-text("Grasa corporal") .delta').getAttribute('class')).includes('up'), 'bajar grasa es bueno');
+      assert.ok((await card.locator('.cmp-fila:has-text("Masa muscular") .delta').getAttribute('class')).includes('dn'), 'bajar músculo no es bueno');
+      assert.ok((await card.locator('.cmp-fila:has-text("Pecho")').innerText()).includes('nuevo'));
+      await card.locator('summary:has-text("Por zona")').click();
+      assert.ok((await card.locator('.cmp-fila:has-text("Grasa tronco")').innerText()).includes('▼ 1,5'));
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Grasa corporal"))')).includes('−1,2 %'));
+      assert.ok((await page.innerText('.graf:has(h3:text-is("Masa muscular"))')).includes('34,6 kg'));
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'cuerpo.png'), fullPage: true });
+    });
+    await prueba('el formulario de Medidas trae báscula, cinta y por zona', async () => {
+      await page.click('.fab');
+      await page.click('dialog [role=tab]:has-text("Medidas")');
+      for (const id of ['#f-grasa_pct', '#f-masa_muscular_kg', '#f-pecho_cm', '#f-muslo_cm']) await page.waitForSelector(id);
+      assert.strictEqual(await page.inputValue('#f-pecho_cm'), '102');
+      await page.fill('#f-grasa_pct', '150');
+      await page.click('dialog button:has-text("Guardar medidas")');
+      await page.waitForSelector('text=Grasa corporal: revisa el número');
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'form-medidas.png'), fullPage: true });
+      await page.keyboard.press('Escape');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Servicio versión 2 (antes de la medición completa)');
+  {
+    const s = crearServicio({ codigo: path.join(__dirname, 'servicio-v2.gs.txt') });
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    s.post({ token: T, accion: 'agregar', tabla: 'comidas', fila: { fecha: hoy, tipo_comida: 'almuerzo', descripcion: 'Arroz con pollo', kcal: 700, proteina_g: 40, carbos_g: 80, grasa_g: 15 } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await prueba('todo sigue funcionando y pide actualizar el servicio', async () => {
+      await page.waitForSelector('.plato .desc:has-text("Arroz con pollo")');
+      await page.waitForSelector('.banda >> text=Actualiza tu servicio de Google');
+    });
+    await prueba('Pegar no guarda a medias la medición completa (avisa que hay que actualizar)', async () => {
+      await page.click('.fab');
+      await page.fill('dialog textarea[aria-label="Datos de Claude"]', JSON.stringify([{ tabla: 'medidas', fecha: ayer, peso_kg: 79.5, grasa_pct: 22.8 }, { tabla: 'medidas', horas_sueno: 7 }]));
+      await page.click('dialog button:has-text("Revisar")');
+      await page.waitForSelector('dialog button:has-text("Guardar 1 registro")');
+      assert.ok((await page.innerText('dialog .lista')).includes('primero actualiza tu servicio de Google'));
+      await page.keyboard.press('Escape');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

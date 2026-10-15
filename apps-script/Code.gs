@@ -10,7 +10,7 @@
  * La contraseña NO está en este archivo ni en el repositorio.
  */
 
-var VERSION = 2;
+var VERSION = 3;
 
 var TABLAS = {
   comidas: [
@@ -52,7 +52,31 @@ var TABLAS = {
     { c: 'peso_kg', t: 'num', min: 20, max: 400 },
     { c: 'cintura_cm', t: 'num', min: 20, max: 300 },
     { c: 'horas_sueno', t: 'num', min: 0, max: 24 },
-    { c: 'creado_en', t: 'ts' }
+    { c: 'creado_en', t: 'ts' },
+    // Medición trimestral (báscula de bioimpedancia y cinta métrica). Versión 3.
+    { c: 'grasa_pct', t: 'num', min: 2, max: 70 },
+    { c: 'masa_muscular_kg', t: 'num', min: 5, max: 150 },
+    { c: 'masa_libre_grasa_kg', t: 'num', min: 10, max: 200 },
+    { c: 'agua_l', t: 'num', min: 10, max: 120 },
+    { c: 'grasa_visceral', t: 'num', min: 0, max: 60 },
+    { c: 'metabolismo_basal_kcal', t: 'num', min: 500, max: 5000 },
+    { c: 'imc', t: 'num', min: 10, max: 70 },
+    { c: 'abdomen_bajo_cm', t: 'num', min: 20, max: 300 },
+    { c: 'pecho_cm', t: 'num', min: 20, max: 300 },
+    { c: 'cadera_cm', t: 'num', min: 20, max: 300 },
+    { c: 'brazo_izq_cm', t: 'num', min: 10, max: 100 },
+    { c: 'brazo_der_cm', t: 'num', min: 10, max: 100 },
+    { c: 'muslo_cm', t: 'num', min: 20, max: 150 },
+    { c: 'magra_brazo_izq_kg', t: 'num', min: 0, max: 30 },
+    { c: 'magra_brazo_der_kg', t: 'num', min: 0, max: 30 },
+    { c: 'magra_tronco_kg', t: 'num', min: 0, max: 100 },
+    { c: 'magra_pierna_izq_kg', t: 'num', min: 0, max: 50 },
+    { c: 'magra_pierna_der_kg', t: 'num', min: 0, max: 50 },
+    { c: 'grasa_brazo_izq_kg', t: 'num', min: 0, max: 30 },
+    { c: 'grasa_brazo_der_kg', t: 'num', min: 0, max: 30 },
+    { c: 'grasa_tronco_kg', t: 'num', min: 0, max: 100 },
+    { c: 'grasa_pierna_izq_kg', t: 'num', min: 0, max: 50 },
+    { c: 'grasa_pierna_der_kg', t: 'num', min: 0, max: 50 }
   ],
   metas: [
     { c: 'clave', t: 'texto', req: true },
@@ -343,14 +367,15 @@ function agregar(nombre, datos) {
 /** Una fila por día. Solo actualiza los campos que vienen llenos. */
 function guardarMedidas(datos) {
   var obj = validar('medidas', datos);
-  if (obj.peso_kg === null && obj.cintura_cm === null && obj.horas_sueno === null) throw new Error('Escribe al menos un dato');
+  var campos = TABLAS.medidas.filter(function (k) { return k.t === 'num'; }).map(function (k) { return k.c; });
+  if (campos.every(function (c) { return obj[c] === null; })) throw new Error('Escribe al menos un dato');
   var h = hoja('medidas');
   var enc = asegurarEncabezados(h, 'medidas');
   var valores = h.getDataRange().getValues();
   var fi = enc.indexOf('fecha');
   for (var r = 1; r < valores.length; r++) {
     if (normFecha(valores[r][fi]) === obj.fecha) {
-      ['peso_kg', 'cintura_cm', 'horas_sueno'].forEach(function (c) {
+      campos.forEach(function (c) {
         if (obj[c] !== null) h.getRange(r + 1, enc.indexOf(c) + 1).setValue(obj[c]);
       });
       return { ok: true, actualizado: true, fecha: obj.fecha };

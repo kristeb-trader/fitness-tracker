@@ -1,0 +1,5 @@
+[
+ {"tabla":"medidas","fecha":"2026-03-10","peso_kg":81.0,"imc":26.2,"grasa_pct":24.0,"masa_libre_grasa_kg":61.6,"agua_l":45.1,"grasa_visceral":9.0,"metabolismo_basal_kcal":1790,"masa_muscular_kg":35.0,"magra_brazo_izq_kg":3.9,"magra_brazo_der_kg":4.0,"magra_tronco_kg":29.5,"magra_pierna_izq_kg":10.6,"magra_pierna_der_kg":10.8,"grasa_brazo_izq_kg":0.9,"grasa_brazo_der_kg":0.9,"grasa_tronco_kg":12.0,"grasa_pierna_izq_kg":1.8,"grasa_pierna_der_kg":1.7},
+ {"tabla":"medidas","fecha":"2026-04-20","peso_kg":79.5,"imc":25.7,"grasa_pct":22.8,"masa_libre_grasa_kg":61.4,"agua_l":44.9,"grasa_visceral":8.0,"metabolismo_basal_kcal":1781,"masa_muscular_kg":34.6,"magra_brazo_izq_kg":4.0,"magra_brazo_der_kg":4.1,"magra_tronco_kg":29.9,"magra_pierna_izq_kg":10.4,"magra_pierna_der_kg":10.5,"grasa_brazo_izq_kg":0.8,"grasa_brazo_der_kg":0.8,"grasa_tronco_kg":10.5,"grasa_pierna_izq_kg":1.9,"grasa_pierna_der_kg":1.8},
+ {"tabla":"medidas","fecha":"HOY","abdomen_bajo_cm":95,"pecho_cm":102,"cintura_cm":90,"cadera_cm":101,"brazo_izq_cm":36,"brazo_der_cm":35,"muslo_cm":57}
+]
