@@ -200,6 +200,7 @@
   var estado = {
     fecha: hoy,
     pantalla: "hoy", // "hoy" o "progreso"
+    semanaEntreno: 0, // 0 = esta semana; −1 = la anterior…
     periodo: 30,     // Progreso: 7, 30, 90, "mes" o "fechas"
     rango: null,     // fechas elegidas a mano {desde, hasta}
     filtroDias: "todos", // "todos", "entreno" o "descanso"
@@ -416,15 +417,16 @@
     var ir = function (p) { return function () { estado.pantalla = p; if (p === "hoy") estado.fecha = estado.fecha > hoy ? hoy : estado.fecha; pintar(); window.scrollTo(0, 0); }; };
     return h("nav", { class: "nav nav5", "aria-label": "Principal" },
       tab("hoy", "Hoy", "🏠", function () { estado.pantalla = "hoy"; irA(iso(new Date())); window.scrollTo(0, 0); }),
-      tab("progreso", "Progreso", "📊", ir("progreso")),
+      tab("entreno", "Entreno", "🏋️", ir("entreno")),
       h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.chat ? "chat" : "pegar"); } }, icono("plus", 28)),
-      tab("cuerpo", "Cuerpo", "🧍", ir("cuerpo")),
-      tab("ajustes", "Ajustes", "⚙️", abrirAjustes));
+      tab("progreso", "Progreso", "📊", ir("progreso")),
+      tab("cuerpo", "Cuerpo", "🧍", ir("cuerpo")));
   }
 
   function pintar() {
     if (estado.pantalla === "progreso") return pintarProgreso();
     if (estado.pantalla === "cuerpo") return pintarCuerpo();
+    if (estado.pantalla === "entreno") return pintarEntreno();
     return pintarHoy();
   }
 
@@ -474,7 +476,8 @@
         h("div", { class: "titulo", text: esHoy ? saludo : "Resumen del " + DIAS_LARGO[fd.getDay()] + " " + corta(estado.fecha) })),
       h("div", { class: "top-btns" },
         h("button", { class: "icono-btn", "aria-label": "Semana anterior", onclick: function () { irA(sumarDias(estado.fecha, -7)); } }, icono("atras", 18)),
-        h("button", { class: "icono-btn", "aria-label": "Semana siguiente", disabled: diasSemana[6] >= hoy, onclick: function () { irA(sumarDias(estado.fecha, 7)); } }, icono("sig", 18)))));
+        h("button", { class: "icono-btn", "aria-label": "Semana siguiente", disabled: diasSemana[6] >= hoy, onclick: function () { irA(sumarDias(estado.fecha, 7)); } }, icono("sig", 18)),
+        botonAjustes())));
     raiz.appendChild(h("div", { class: "dias" }, diasSemana.map(function (f) {
       var dd = deISO(f);
       return h("button", { class: "dia" + (f === estado.fecha ? " on" : ""), disabled: f > hoy, "aria-label": DIAS_LARGO[dd.getDay()] + " " + dd.getDate(), onclick: function () { irA(f); } },
@@ -515,7 +518,8 @@
         h("div", { class: "cab" }, h("span", { class: "chip-ico", style: "background:#E7F0FE", text: "🌙" }), h("span", { text: "Sueño" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", { class: "valor" }, sueno === null ? "—" : fmt(sueno, 1), " ", h("small", { text: "h" })),
         h("div", { class: "nota", text: sueno === null ? "Toca para registrar" : "Meta 8 h" + (sueno < 8 ? " · faltó " + fmt(8 - sueno, 1) + " h" : " ✓") })),
-      h("button", { type: "button", class: "card tocable", "aria-label": "Registrar ejercicio", onclick: function () { abrirAgregar("ejercicio"); } },
+      h("button", { type: "button", class: "card tocable", "aria-label": d.ejercicio.length || grupos.length ? "Ver entreno" : "Registrar ejercicio",
+        onclick: function () { if (d.ejercicio.length || grupos.length) { estado.pantalla = "entreno"; estado.semanaEntreno = Math.round((lunesDe(estado.fecha) - lunesDe(hoy)) / 604800000); pintar(); window.scrollTo(0, 0); } else abrirAgregar("ejercicio"); } },
         h("div", { class: "cab" }, h("span", { class: "chip-ico", style: "background:#FFF1E2", text: "🏋️" }), h("span", { text: "Entreno" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", { class: "valor valor-t", text: entrenoTxt }),
         h("div", { class: "nota", text: entrenoSub }))));
@@ -706,8 +710,9 @@
     return r;
   }
 
+  function botonAjustes() { return h("button", { class: "icono-btn", "aria-label": "Ajustes", onclick: abrirAjustes }, icono("ajustes", 20)); }
   function encabezado(sub, titulo) {
-    raiz.appendChild(h("div", { class: "top" }, h("div", {}, h("div", { class: "sub", text: sub }), h("div", { class: "titulo", text: titulo }))));
+    raiz.appendChild(h("div", { class: "top" }, h("div", {}, h("div", { class: "sub", text: sub }), h("div", { class: "titulo", text: titulo })), botonAjustes()));
   }
   /** Tarjeta con una pregunta, la respuesta en palabras (✓ o !) y su gráfica. */
   function pregunta(num, tema, titulo, bien, respuesta, contenido) {
@@ -910,6 +915,297 @@
     raiz.appendChild(graficaMedida(med, "masa_muscular_kg", "Masa muscular", "kg", COLOR.cintura));
     raiz.appendChild(graficaMedida(med, "cintura_cm", "Cintura", "cm", COLOR.tinta));
     raiz.appendChild(navegacion("cuerpo"));
+  }
+
+  // ---------- Pantalla "Entreno" ----------
+  // Fotos de ejercicios: Free Exercise DB (dominio público). Se busca por el nombre en español.
+  var FOTOS_EJ = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
+  var GRUPOS = { pecho: "Pecho", espalda: "Espalda", hombros: "Hombros", biceps: "Bíceps", triceps: "Tríceps", antebrazo: "Antebrazo", abdomen: "Abdomen",
+    cuadriceps: "Cuádriceps", femorales: "Femorales", gluteos: "Glúteos", aductores: "Aductores", pantorrillas: "Pantorrillas" };
+  // [palabras (expresión), foto, músculos principales, secundarios]. Lo más específico va primero.
+  var CATALOGO_EJ = [
+    [/press.*inclinad|inclinad.*press/, "Barbell_Incline_Bench_Press_-_Medium_Grip", ["pecho"], ["hombros", "triceps"]],
+    [/press.*declinad/, "Decline_Barbell_Bench_Press", ["pecho"], ["triceps"]],
+    [/press.*(banca|plano).*(mancuerna)|press.*mancuerna.*(pecho|banca)/, "Dumbbell_Bench_Press", ["pecho"], ["triceps", "hombros"]],
+    [/press.*(banca|plano)|bench/, "Barbell_Bench_Press_-_Medium_Grip", ["pecho"], ["triceps", "hombros"]],
+    [/chest press|press de pecho|press pecho|pecho articulado|press.*maquina.*pecho/, "Leverage_Chest_Press", ["pecho"], ["triceps", "hombros"]],
+    [/apertura|peck|pec deck|mariposa|\bfly\b|contractor/, "Butterfly", ["pecho"], []],
+    [/cruce|crossover/, "Cable_Crossover", ["pecho"], ["hombros"]],
+    [/fondo.*pecho|paralela/, "Dips_-_Chest_Version", ["pecho"], ["triceps"]],
+    [/flexion|push ?up/, "Pushups", ["pecho"], ["triceps", "hombros"]],
+    [/jalon.*tricep|tricep.*(polea|cuerda|jalon)|pushdown|extension.*tricep|tricep.*extension/, "Triceps_Pushdown", ["triceps"], []],
+    [/jalon.*(cerrad|estrech)/, "Close-Grip_Front_Lat_Pulldown", ["espalda"], ["biceps"]],
+    [/jalon|pulldown|polea al pecho/, "Wide-Grip_Lat_Pulldown", ["espalda"], ["biceps"]],
+    [/remo.*(bajo|sentad|polea|cerrad)/, "Seated_Cable_Rows", ["espalda"], ["biceps"]],
+    [/remo.*(pivote|\bt\b|landmine)/, "T-Bar_Row_with_Handle", ["espalda"], ["biceps"]],
+    [/remo.*mancuerna|serrucho/, "One-Arm_Dumbbell_Row", ["espalda"], ["biceps"]],
+    [/remo/, "Bent_Over_Barbell_Row", ["espalda"], ["biceps"]],
+    [/dominada|pull ?up/, "Pullups", ["espalda"], ["biceps"]],
+    [/pullover|brazos rectos/, "Straight-Arm_Pulldown", ["espalda"], []],
+    [/peso muerto rumano|rumano/, "Romanian_Deadlift", ["femorales"], ["gluteos", "espalda"]],
+    [/peso muerto/, "Barbell_Deadlift", ["espalda", "femorales"], ["gluteos"]],
+    [/hiperextension|lumbar/, "Hyperextensions_Back_Extensions", ["espalda"], ["gluteos"]],
+    [/press.*(militar|hombro)|hombro.*press/, "Dumbbell_Shoulder_Press", ["hombros"], ["triceps"]],
+    [/lateral/, "Side_Lateral_Raise", ["hombros"], []],
+    [/frontal/, "Front_Dumbbell_Raise", ["hombros"], []],
+    [/pajaro|posterior|face pull|vuelo inverso/, "Reverse_Flyes", ["hombros"], ["espalda"]],
+    [/encogimiento|trapecio/, "Barbell_Shrug", ["espalda"], []],
+    [/martillo/, "Hammer_Curls", ["biceps"], ["antebrazo"]],
+    [/predicador|scott/, "Preacher_Curl", ["biceps"], []],
+    [/curl.*(femoral|pierna)|femoral/, "Seated_Leg_Curl", ["femorales"], []],
+    [/curl|bicep/, "Dumbbell_Bicep_Curl", ["biceps"], ["antebrazo"]],
+    [/press frances|rompecraneo/, "EZ-Bar_Skullcrusher", ["triceps"], []],
+    [/fondo/, "Bench_Dips", ["triceps"], ["pecho"]],
+    [/tricep/, "Triceps_Pushdown", ["triceps"], []],
+    [/bulgar|split/, "Split_Squat_with_Dumbbells", ["cuadriceps"], ["gluteos"]],
+    [/hack/, "Hack_Squat", ["cuadriceps"], ["gluteos"]],
+    [/goblet|copa/, "Goblet_Squat", ["cuadriceps"], ["gluteos"]],
+    [/sentadilla.*smith|smith/, "Smith_Machine_Squat", ["cuadriceps"], ["gluteos"]],
+    [/sentadilla|squat/, "Barbell_Full_Squat", ["cuadriceps"], ["gluteos", "femorales"]],
+    [/prensa/, "Leg_Press", ["cuadriceps"], ["gluteos"]],
+    [/extension|cuadricep/, "Leg_Extensions", ["cuadriceps"], []],
+    [/zancada|estocada|lunge/, "Dumbbell_Lunges", ["cuadriceps"], ["gluteos"]],
+    [/hip thrust|empuje de cadera/, "Barbell_Hip_Thrust", ["gluteos"], ["femorales"]],
+    [/puente/, "Barbell_Glute_Bridge", ["gluteos"], ["femorales"]],
+    [/abductor/, "Thigh_Abductor", ["gluteos"], []],
+    [/aductor/, "Thigh_Adductor", ["aductores"], []],
+    [/pantorrilla.*sentad|gemelo.*sentad/, "Seated_Calf_Raise", ["pantorrillas"], []],
+    [/pantorrilla|gemelo|talon/, "Standing_Calf_Raises", ["pantorrillas"], []],
+    [/plancha/, "Plank", ["abdomen"], []],
+    [/elevacion de piernas|colgad/, "Hanging_Leg_Raise", ["abdomen"], []],
+    [/rueda/, "Ab_Roller", ["abdomen"], []],
+    [/abdomen|abdominal|crunch/, "Crunches", ["abdomen"], []]
+  ];
+  // Palabras de la rutina o de las notas → grupos (para sesiones guardadas sin series)
+  var PALABRAS_GRUPO = [[/pecho|pectoral/, "pecho"], [/espalda|dorsal/, "espalda"], [/hombro/, "hombros"], [/bicep/, "biceps"], [/tricep/, "triceps"],
+    [/abdomen|abdominal/, "abdomen"], [/pierna/, "cuadriceps"], [/pierna|femoral/, "femorales"], [/pierna|gluteo/, "gluteos"], [/pantorrilla|gemelo/, "pantorrillas"], [/cuadricep/, "cuadriceps"]];
+  function sinTildes(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  function infoEjercicio(nombre) {
+    var t = sinTildes(nombre);
+    for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) return { foto: CATALOGO_EJ[i][1], principales: CATALOGO_EJ[i][2], secundarios: CATALOGO_EJ[i][3] };
+    var g = PALABRAS_GRUPO.filter(function (p) { return p[0].test(t); }).map(function (p) { return p[1]; });
+    return { foto: null, principales: g.filter(function (x, k) { return g.indexOf(x) === k; }), secundarios: [] };
+  }
+  function nombresGrupos(l) { return l.map(function (g) { return GRUPOS[g]; }).join(" · "); }
+
+  /** Foto del ejercicio (al tocarla cambia entre la posición inicial y la final). Sin foto: un icono. */
+  function fotoEjercicio(info) {
+    var caja = h("button", { type: "button", class: "foto-ej", "aria-label": "Ver la otra posición del ejercicio" });
+    if (!info.foto) { caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; return caja; }
+    var n = 0;
+    var img = h("img", { src: FOTOS_EJ + info.foto + "/0.jpg", alt: "", loading: "lazy" });
+    var marca = h("span", { class: "foto-n", text: "1/2" });
+    img.addEventListener("error", function () { caja.textContent = ""; caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; });
+    caja.addEventListener("click", function (e) { e.stopPropagation(); n = 1 - n; img.src = FOTOS_EJ + info.foto + "/" + n + ".jpg"; marca.textContent = (n + 1) + "/2"; });
+    caja.appendChild(img); caja.appendChild(marca);
+    return caja;
+  }
+
+  /** Figura del cuerpo (frente o espalda) con los músculos pintados según las series. */
+  var FIGURA = {
+    frente: [["c", 60, 20, 13, null], ["r", 53, 31, 14, 10, 4, null],
+      ["e", 33, 52, 11, 10, "hombros"], ["e", 87, 52, 11, 10, "hombros"], ["r", 39, 43, 20, 28, 8, "pecho"], ["r", 61, 43, 20, 28, 8, "pecho"],
+      ["e", 27, 80, 7, 14, "biceps"], ["e", 93, 80, 7, 14, "biceps"], ["e", 22, 110, 6, 14, "antebrazo"], ["e", 98, 110, 6, 14, "antebrazo"],
+      ["r", 46, 73, 28, 40, 8, "abdomen"], ["r", 44, 114, 32, 14, 6, null],
+      ["e", 47, 155, 12, 28, "cuadriceps"], ["e", 73, 155, 12, 28, "cuadriceps"], ["e", 58, 150, 3, 16, "aductores"], ["e", 62, 150, 3, 16, "aductores"],
+      ["e", 47, 210, 8, 20, "pantorrillas"], ["e", 73, 210, 8, 20, "pantorrillas"]],
+    espalda: [["c", 60, 20, 13, null], ["r", 53, 31, 14, 10, 4, null],
+      ["e", 33, 52, 11, 10, "hombros"], ["e", 87, 52, 11, 10, "hombros"], ["r", 44, 41, 32, 16, 7, "espalda"], ["r", 38, 58, 44, 44, 12, "espalda"],
+      ["e", 27, 80, 7, 14, "triceps"], ["e", 93, 80, 7, 14, "triceps"], ["e", 22, 110, 6, 14, "antebrazo"], ["e", 98, 110, 6, 14, "antebrazo"],
+      ["r", 46, 103, 28, 12, 5, "espalda"], ["e", 50, 128, 12, 12, "gluteos"], ["e", 70, 128, 12, 12, "gluteos"],
+      ["e", 48, 165, 11, 24, "femorales"], ["e", 72, 165, 11, 24, "femorales"], ["e", 47, 212, 8, 19, "pantorrillas"], ["e", 73, 212, 8, 19, "pantorrillas"]]
+  };
+  function colorNivel(n) { return n <= 0 ? "#E3E8E0" : n < 4 ? "#B8E68F" : n < 10 ? "#2FA36B" : "#0E6B47"; }
+  function figuraCuerpo(lado, nivel) {
+    var s = "";
+    FIGURA[lado].forEach(function (p) {
+      var g = p[p.length - 1], fill = g ? colorNivel(nivel[g] || 0) : "#D5DCD1";
+      var tit = g ? "<title>" + GRUPOS[g] + ": " + fmt(nivel[g] || 0, 1) + " series</title>" : "";
+      if (p[0] === "c") s += '<circle cx="' + p[1] + '" cy="' + p[2] + '" r="' + p[3] + '" fill="' + fill + '"/>';
+      else if (p[0] === "e") s += '<ellipse cx="' + p[1] + '" cy="' + p[2] + '" rx="' + p[3] + '" ry="' + p[4] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5">' + tit + "</ellipse>";
+      else s += '<rect x="' + p[1] + '" y="' + p[2] + '" width="' + p[3] + '" height="' + p[4] + '" rx="' + p[5] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5">' + tit + "</rect>";
+    });
+    var t = document.createElement("template");
+    t.innerHTML = '<svg viewBox="0 0 120 240" width="112" role="img" aria-label="Músculos trabajados, ' + lado + '">' + s + "</svg>";
+    return h("div", { class: "fig" }, t.content.firstChild, h("small", { text: lado === "frente" ? "Frente" : "Espalda" }));
+  }
+
+  /** Todas las sesiones de cada ejercicio (para comparar con la vez anterior, récords e historial). */
+  function historialEjercicios() {
+    var porEj = {};
+    (estado.tablas ? estado.tablas.series_gym : []).forEach(function (s) {
+      var n = String(s.ejercicio || "").trim();
+      if (!n || !s.fecha) return;
+      var k = sinTildes(n);
+      var e = porEj[k] = porEj[k] || { nombre: n, porFecha: {} };
+      (e.porFecha[s.fecha] = e.porFecha[s.fecha] || []).push(s);
+    });
+    Object.keys(porEj).forEach(function (k) {
+      var e = porEj[k];
+      e.sesiones = Object.keys(e.porFecha).sort().map(function (f) {
+        var series = e.porFecha[f].slice().sort(function (a, b) { return (Number(a.numero_serie) || 0) - (Number(b.numero_serie) || 0); });
+        var max = Math.max.apply(null, series.map(function (s) { return Number(s.peso_kg) || 0; }));
+        var vol = series.reduce(function (a, s) { return a + (Number(s.peso_kg) || 0) * (Number(s.repeticiones) || 0); }, 0);
+        return { fecha: f, series: series, max: max, vol: vol };
+      });
+      var mejor = -1;
+      e.sesiones.forEach(function (x, i) { x.record = i > 0 && x.max > mejor; mejor = Math.max(mejor, x.max); });
+    });
+    return porEj;
+  }
+
+  function abrirHistorialEjercicio(e) {
+    var info = infoEjercicio(e.nombre);
+    var pts = e.sesiones.map(function (x, i) { return { x: e.sesiones.length < 2 ? 0.5 : i / (e.sesiones.length - 1), v: x.max, txt: fechaLarga(x.fecha) + ": " + fmt(x.max, 1) + " kg · volumen " + fmt(x.vol) + " kg" }; });
+    var vals = pts.map(function (p) { return p.v; });
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), pad = Math.max(2.5, (mx - mn) * 0.2);
+    var marcas = marcasDe(Math.max(0, mn - pad), mx + pad, 3);
+    abrirHoja(e.nombre, h("div", { style: "display:flex;flex-direction:column;gap:10px" },
+      h("div", { class: "ej-cab" }, fotoEjercicio(info), h("div", {}, h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) || "Ejercicio" }),
+        h("div", { class: "nota", text: plural(e.sesiones.length, "sesión", "sesiones") + " · mejor peso " + fmt(Math.max.apply(null, vals), 1) + " kg" }))),
+      h("div", { class: "graf" }, h("h3", { text: "Peso máximo por sesión" }),
+        grafica({ tipo: "linea", puntos: pts, min: Math.min(marcas[0], mn - pad / 2), max: Math.max(marcas[marcas.length - 1], mx + pad / 2), marcas: marcas, unir: true, color: COLOR.tinta, relleno: COLOR.lima, borde: COLOR.tinta, alto: 130,
+          fmtEje: function (t) { return fmt(t, 1); }, fechas: pts.length > 1 ? [[0, corta(e.sesiones[0].fecha)], [1, corta(e.sesiones[e.sesiones.length - 1].fecha)]] : [], resumen: e.nombre })),
+      h("div", { class: "lista" }, e.sesiones.slice().reverse().map(function (x) {
+        return h("div", { class: "item" }, h("div", { class: "t" }, h("b", { text: fechaLarga(x.fecha) + (x.record ? " · 🏆 récord" : "") }),
+          h("span", { text: x.series.map(function (s) { return fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones); }).join(" · ") })));
+      }))));
+  }
+
+  function tarjetaEjercicio(g, fecha, hist) {
+    var info = infoEjercicio(g.ejercicio);
+    var e = hist[sinTildes(g.ejercicio)];
+    var idx = e ? e.sesiones.map(function (x) { return x.fecha; }).indexOf(fecha) : -1;
+    var actual = idx >= 0 ? e.sesiones[idx] : null, previa = idx > 0 ? e.sesiones[idx - 1] : null;
+    var badge = null;
+    if (actual && actual.record) badge = h("span", { class: "badge pr", text: "🏆 Récord: " + fmt(actual.max, 1) + " kg" });
+    else if (actual && previa && actual.max !== previa.max) badge = h("span", { class: "badge " + (actual.max > previa.max ? "up" : "dn"), text: (actual.max > previa.max ? "▲ +" : "▼ −") + fmt(Math.abs(actual.max - previa.max), 1) + " kg" });
+    var vol = g.series.reduce(function (a, s) { return a + (Number(s.peso_kg) || 0) * (Number(s.repeticiones) || 0); }, 0);
+    var filas = g.series.map(function (s) {
+      var antes = previa ? previa.series.filter(function (p) { return Number(p.numero_serie) === Number(s.numero_serie); })[0] : null;
+      var dif = antes ? (Number(s.peso_kg) || 0) - (Number(antes.peso_kg) || 0) : null;
+      return h("tr", {}, h("td", {}, h("span", { class: "n", text: fmt(s.numero_serie) })), h("td", { text: fmt(s.peso_kg, 1) + " kg" }), h("td", { text: fmt(s.repeticiones) }),
+        h("td", { class: "v" + (dif > 0 ? " sube" : ""), text: !previa ? "nuevo" : dif === null ? "—" : dif === 0 ? "=" : (dif > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dif), 1) + " kg" }));
+    });
+    var difVol = previa && previa.vol ? Math.round((vol - previa.vol) / previa.vol * 100) : null;
+    return h("div", { class: "ej" },
+      h("div", { class: "ej-cab" }, fotoEjercicio(info),
+        h("button", { type: "button", class: "ej-t", "aria-label": "Historial de " + g.ejercicio, onclick: function () { if (e) abrirHistorialEjercicio(e); } },
+          h("b", { text: g.ejercicio }), h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) }), badge,
+          h("span", { class: "ej-ver", text: "Ver historial ›" }))),
+      h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Serie" }), h("th", { text: "Peso" }), h("th", { text: "Reps" }), h("th", { class: "v", text: "vs anterior" }))), h("tbody", {}, filas)),
+      h("div", { class: "tot" }, h("span", { text: "Volumen " + fmt(vol) + " kg" }),
+        difVol === null ? null : h("span", { class: "badge " + (difVol >= 0 ? "up" : "dn"), text: (difVol >= 0 ? "▲ " : "▼ ") + Math.abs(difVol) + " % vs el " + corta(previa.fecha) }),
+        h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleGym(g); } })));
+  }
+
+  function datoNotas(notas, re) { var m = sinTildes(notas).match(re); return m ? m[1].replace(/\./g, "").replace(",", ".") : null; }
+
+  function pintarEntreno() {
+    raiz.textContent = "";
+    bandas();
+    encabezado("Tu entrenamiento", "Entreno");
+    if (!estado.tablas) { raiz.appendChild(h("div", { class: "vacio", text: "Para ver tu entreno, la app necesita la versión nueva del servicio de Google." })); raiz.appendChild(navegacion("entreno")); return; }
+    var T = estado.tablas, hist = historialEjercicios();
+    var lunes = sumarDias(iso(lunesDe(hoy)), 7 * (estado.semanaEntreno || 0)), dias = [];
+    for (var i = 0; i < 7; i++) dias.push(sumarDias(lunes, i));
+    var ejDe = function (f) { return T.ejercicio.filter(function (x) { return x.fecha === f; }); };
+    var serDe = function (f) { return T.series_gym.filter(function (x) { return x.fecha === f; }); };
+    var EMO = { gym: "💪", bici: "🚴", caminata: "🚶" };
+
+    // Semana: sesiones, tiempo, kcal y kg levantados
+    var ses = 0, minutos = 0, kcal = 0, kg = 0, nivel = {};
+    dias.forEach(function (f) {
+      var ej = ejDe(f), se = serDe(f);
+      ses += ej.length + (se.length && !ej.some(function (x) { return x.tipo === "gym"; }) ? 1 : 0);
+      ej.forEach(function (x) { minutos += Number(x.duracion_min) || 0; kcal += Number(x.kcal) || 0; });
+      se.forEach(function (s) {
+        kg += (Number(s.peso_kg) || 0) * (Number(s.repeticiones) || 0);
+        var inf = infoEjercicio(s.ejercicio);
+        inf.principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 1; });
+        inf.secundarios.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 0.5; });
+      });
+      // Sesiones de gym sin series: se estima con la rutina o las notas (3 series por grupo)
+      if (!se.length) ej.filter(function (x) { return x.tipo === "gym"; }).forEach(function (x) {
+        infoEjercicio((x.notas || "") + " " + (x.rutina || "")).principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 3; });
+      });
+    });
+    var etiquetaSemana = (estado.semanaEntreno || 0) === 0 ? "Esta semana" : corta(dias[0]) + " – " + corta(dias[6]);
+    raiz.appendChild(h("div", { class: "hero hero-ent" },
+      h("div", { class: "sem-cab" },
+        h("button", { class: "mini-nav", "aria-label": "Semana anterior de entreno", onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) - 1; pintar(); } }, icono("atras", 16)),
+        h("div", { class: "hero-t", text: etiquetaSemana }),
+        h("button", { class: "mini-nav", "aria-label": "Semana siguiente de entreno", disabled: (estado.semanaEntreno || 0) >= 0, onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) + 1; pintar(); } }, icono("sig", 16))),
+      h("div", { class: "sem-ent" }, dias.map(function (f) {
+        var tipos = ejDe(f).map(function (x) { return x.tipo; });
+        if (serDe(f).length && tipos.indexOf("gym") < 0) tipos.push("gym");
+        var d = deISO(f);
+        return h("button", { type: "button", class: "dia-ent" + (tipos.length ? " on" : "") + (f > hoy ? " fut" : ""), "aria-label": fechaLarga(f) + (tipos.length ? ": " + tipos.join(", ") : ": descanso"),
+          onclick: function () { var el = document.getElementById("ses-" + f); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } },
+          h("small", { text: DIAS_CORTO[(d.getDay() + 6) % 7] }), h("span", { text: tipos.length ? tipos.map(function (t) { return EMO[t] || "🏃"; }).join("") : "·" }));
+      })),
+      h("div", { class: "kp-ent" },
+        h("div", {}, h("b", { text: String(ses) }), h("small", { text: ses === 1 ? "sesión" : "sesiones" })),
+        h("div", {}, h("b", { text: minutos >= 60 ? Math.floor(minutos / 60) + " h " + (minutos % 60 ? dos(minutos % 60) : "") : minutos + " min" }), h("small", { text: "tiempo" })),
+        h("div", {}, h("b", { text: fmt(kcal) }), h("small", { text: "kcal" })),
+        h("div", {}, h("b", { text: fmt(kg) }), h("small", { text: "kg levantados" })))));
+
+    // Racha y récords del mes
+    var entreno = {};
+    T.ejercicio.forEach(function (x) { entreno[x.fecha] = true; });
+    T.series_gym.forEach(function (x) { entreno[x.fecha] = true; });
+    var racha = 0, f0 = entreno[hoy] ? hoy : sumarDias(hoy, -1);
+    while (entreno[f0]) { racha++; f0 = sumarDias(f0, -1); }
+    var mes = hoy.slice(0, 7), records = 0;
+    Object.keys(hist).forEach(function (k) { hist[k].sesiones.forEach(function (x) { if (x.record && x.fecha.slice(0, 7) === mes) records++; }); });
+    raiz.appendChild(h("div", { class: "racha" },
+      h("div", {}, h("b", { text: "🔥 " + plural(racha, "día", "días") }), h("small", { text: "Racha entrenando" })),
+      h("div", {}, h("b", { text: "🏆 " + records }), h("small", { text: records === 1 ? "Récord este mes" : "Récords este mes" }))));
+
+    // Músculos trabajados
+    var gruposSem = Object.keys(nivel).sort(function (a, b) { return nivel[b] - nivel[a]; });
+    raiz.appendChild(h("div", { class: "graf" }, h("h3", { text: "Músculos trabajados" }),
+      h("div", { class: "d", text: etiquetaSemana + " · más oscuro = más series" }),
+      h("div", { class: "cuerpo-fig" }, figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
+      leyenda([["#E3E8E0", "Sin trabajar"], ["#B8E68F", "Poco"], ["#2FA36B", "Medio"], ["#0E6B47", "Mucho"]]),
+      gruposSem.length ? h("div", { class: "chips-m" }, gruposSem.map(function (g) { return h("span", { text: GRUPOS[g] + " · " + fmt(nivel[g], 0) + " series" }); }))
+        : h("div", { class: "nota", text: "Aún no hay series de gym esta semana." })));
+
+    // Sesiones de la semana (lo más reciente primero)
+    var conSesion = dias.filter(function (f) { return ejDe(f).length || serDe(f).length; }).reverse();
+    if (!conSesion.length) raiz.appendChild(h("div", { class: "vacio", text: "Sin entrenamientos esta semana. Toca + para registrar tu ejercicio." }));
+    conSesion.forEach(function (f) {
+      var ej = ejDe(f), grupos = agruparSeries(serDe(f));
+      var gym = ej.filter(function (x) { return x.tipo === "gym"; })[0];
+      if (grupos.length || gym) {
+        var volDia = serDe(f).reduce(function (a, s) { return a + (Number(s.peso_kg) || 0) * (Number(s.repeticiones) || 0); }, 0);
+        var rutina = grupos.length && grupos[0].rutina ? grupos[0].rutina : gym && gym.notas ? String(gym.notas).split(/[:.,]/)[0] : "Gym";
+        var sub = ["Gym"];
+        if (gym && gym.duracion_min) sub.push(fmt(gym.duracion_min) + " min");
+        if (gym && !vacio(gym.kcal)) sub.push(fmt(gym.kcal) + " kcal");
+        if (grupos.length) { sub.push(plural(grupos.length, "ejercicio", "ejercicios")); sub.push(fmt(volDia) + " kg"); }
+        raiz.appendChild(h("div", { class: "graf sesion", id: "ses-" + f },
+          h("div", { class: "ses" }, h("span", { class: "emo", style: "background:#FFF1E2", text: "🏋️" }),
+            h("div", {}, h("b", { text: fechaLarga(f) + " · " + rutina }), h("small", { text: sub.join(" · ") }))),
+          gym && gym.notas && !grupos.length ? h("p", { class: "ses-notas", text: gym.notas }) : null,
+          !grupos.length ? h("p", { class: "ayuda", text: "Para ver cada ejercicio con su foto, series y récords, registra las series (peso y repeticiones). Por ejemplo, dile a Claude: «jalón al frente 3 series: 40×12, 45×10, 50×8»." }) : null,
+          grupos.map(function (g) { return tarjetaEjercicio(g, f, hist); })));
+      }
+      ej.filter(function (x) { return x.tipo !== "gym"; }).forEach(function (x) {
+        var km = datoNotas(x.notas, /([\d.,]+)\s*km/), desn = datoNotas(x.notas, /([\d.,]+)\s*m de desnivel/);
+        var nombre = x.notas ? String(x.notas).split(/[:,(]/)[0] : cap(x.tipo);
+        raiz.appendChild(h("div", { class: "graf sesion", id: "ses-" + f },
+          h("div", { class: "ses" }, h("span", { class: "emo", style: "background:" + (x.tipo === "bici" ? "#E7F0FE" : "#E9F7E1"), text: x.tipo === "bici" ? "🚴" : x.tipo === "caminata" ? "🚶" : "🏃" }),
+            h("div", {}, h("b", { text: fechaLarga(f) + " · " + nombre }), h("small", { text: cap(x.tipo) + (x.fuente ? " · " + cap(x.fuente) : "") }))),
+          h("div", { class: "cardio" },
+            km ? h("div", {}, h("b", { text: fmt(Number(km), 1) + " km" }), h("small", { text: "distancia" })) : null,
+            h("div", {}, h("b", { text: x.duracion_min ? (x.duracion_min >= 60 ? Math.floor(x.duracion_min / 60) + " h " + dos(x.duracion_min % 60) : fmt(x.duracion_min) + " min") : "—" }), h("small", { text: "tiempo" })),
+            h("div", {}, h("b", { text: vacio(x.kcal) ? "—" : fmt(x.kcal) }), h("small", { text: "kcal" }))),
+          desn ? h("div", { class: "chips-m" }, h("span", { text: "⛰️ " + fmt(Number(desn)) + " m de desnivel" })) : null,
+          h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleEjercicio(x); } })));
+      });
+    });
+    raiz.appendChild(navegacion("entreno"));
   }
 
   /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */
@@ -1216,6 +1512,7 @@
       "",
       "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
       "El sueño lo registro cada día; el peso y la cintura solo cada 3 meses. En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
+      "Gym: registra cada serie en series_gym (ejercicio con su nombre común en español, por ejemplo «Jalón al frente», «Remo bajo», «Press banca»; en «rutina» el nombre del día, por ejemplo «Espalda y bíceps») y además UN registro de ejercicio tipo gym con la duración y las kcal de la sesión.",
       "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
     ].join("\n");
   }

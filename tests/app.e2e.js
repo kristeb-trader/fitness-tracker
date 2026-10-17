@@ -59,6 +59,8 @@ async function abrir(configJs, servicios) {
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: out });
   });
   await page.route('https://fonts.googleapis.com/**', (r) => r.abort());
+  // Fotos de ejercicios: imagen mínima, sin salir a internet
+  await page.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ status: 200, contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64') }));
   await page.route('https://fonts.gstatic.com/**', (r) => r.abort());
   const base = 'http://localhost:' + servidor.address().port + '/';
   const cerrar = async () => { await navegador.close(); servidor.close(); };
@@ -287,9 +289,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForFunction(() => /7,5\s*h/.test(document.querySelector('.dos').innerText));
       const enc = s.hojas.medidas.filas[0], fila = s.hojas.medidas.filas.find((f) => f[0] === hoy);
       assert.strictEqual(fila[enc.indexOf('peso_kg')], 71.6, 'no borra el peso');
-      await page.click('.dos button[aria-label="Registrar ejercicio"]');
-      await page.waitForSelector('dialog [role=tab].on:has-text("Ejercicio")');
-      await page.keyboard.press('Escape');
+      await page.click('.dos button[aria-label="Ver entreno"]');
+      await page.waitForSelector('.titulo:has-text("Entreno")');
+      await page.click('.nav [aria-label="Hoy"]');
+      await page.waitForSelector('.hero');
     });
     await prueba('borrar una serie de gym desde su detalle', async () => {
       page.once('dialog', (d) => d.accept());
@@ -298,7 +301,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForFunction(() => /Press banca · 1 serie/.test(document.body.innerText));
     });
     await prueba('Ajustes: simple; lo técnico plegado en «Opciones avanzadas», con el botón que copia el código', async () => {
-      await page.click('.nav [aria-label="Ajustes"]');
+      await page.click('.top [aria-label="Ajustes"]');
       await page.waitForSelector('dialog >> text=Mis metas');
       await captura(page, 'ajustes-simple');
       assert.ok(!(await page.innerText('dialog')).includes('versión 3'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
@@ -382,7 +385,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForFunction(() => !document.querySelector('.banda'));
     });
     await prueba('Ajustes: «Buscar registros repetidos» dice que ya no hay', async () => {
-      await page.click('.nav [aria-label="Ajustes"]');
+      await page.click('.top [aria-label="Ajustes"]');
       await page.click('dialog button:has-text("Buscar registros repetidos")');
       await page.waitForSelector('dialog >> text=No encontré registros repetidos');
       await page.keyboard.press('Escape');
@@ -472,6 +475,71 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('volver a Hoy', async () => {
       await page.click('.nav [aria-label="Hoy"]');
       await page.waitForSelector('.hero');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Entreno: series con foto, récords, músculos trabajados y cardio');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    const hace = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return isoLocal(d); };
+    const serie = (id, f, ej, n, kg, reps) => s.hojas.series_gym.filas.push([id, f, 'Espalda y bíceps', ej, n, kg, reps, '']);
+    // La vez anterior (hace 7 días) y hoy: en jalón sube el peso (récord)
+    serie('a1', hace(7), 'Jalón al frente', 1, 40, 12); serie('a2', hace(7), 'Jalón al frente', 2, 40, 10); serie('a3', hace(7), 'Jalón al frente', 3, 45, 8);
+    serie('b1', hoy, 'Jalón al frente', 1, 40, 12); serie('b2', hoy, 'Jalón al frente', 2, 45, 10); serie('b3', hoy, 'Jalón al frente', 3, 50, 8);
+    serie('c1', hoy, 'Remo bajo', 1, 45, 12);
+    serie('d1', hoy, 'Curl martillo', 1, 12, 12);
+    s.hojas.ejercicio.filas.push(['e1', hoy, 'gym', 80, 350, 'estimado', '', '', '']);
+    s.hojas.ejercicio.filas.push(['e2', hoy, 'bici', 203, 2035, 'strava', '', 'Ruta Amagá: 56 km, 1.368 m de desnivel', '']);
+    s.hojas.ejercicio.filas.push(['e3', hace(1), 'caminata', 30, 120, 'manual', '', '', '']);
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+
+    await prueba('la barra de abajo trae Entreno y abre la pantalla con la semana', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.waitForSelector('.titulo:has-text("Entreno")');
+      const kp = await page.innerText('.kp-ent');
+      assert.ok(kp.includes('2.014') && kp.includes('kg levantados'), kp);
+      assert.ok((await page.innerText('.racha')).includes('🔥 2 días'));
+    });
+    await prueba('músculos trabajados: figura de frente y espalda, con espalda y bíceps', async () => {
+      assert.strictEqual(await page.locator('.cuerpo-fig svg').count(), 2);
+      const chips = await page.innerText('.chips-m');
+      assert.ok(chips.includes('Espalda') && chips.includes('Bíceps'), chips);
+    });
+    await prueba('cada ejercicio con su foto, sus series y la comparación con la vez anterior', async () => {
+      const card = page.locator('.ej:has(b:text-is("Jalón al frente"))');
+      const src = await card.locator('.foto-ej img').getAttribute('src');
+      assert.ok(src.endsWith('Wide-Grip_Lat_Pulldown/0.jpg'), src);
+      await card.locator('.foto-ej').click();
+      assert.ok((await card.locator('.foto-ej img').getAttribute('src')).endsWith('/1.jpg'), 'al tocar cambia de posición');
+      const t = await card.innerText();
+      assert.ok(t.includes('🏆 Récord: 50 kg') && t.includes('▲ 5 kg') && t.includes('Volumen 1.330 kg') && /% vs el/.test(t), t);
+      assert.ok((await page.innerText('.ej:has(b:text-is("Curl martillo"))')).includes('Bíceps'));
+    });
+    await prueba('historial del ejercicio con su gráfica', async () => {
+      await page.click('[aria-label="Historial de Jalón al frente"]');
+      await page.waitForSelector('dialog >> text=2 sesiones');
+      assert.ok((await page.innerText('dialog')).includes('🏆 récord'));
+      await page.keyboard.press('Escape');
+    });
+    await prueba('cardio: distancia y desnivel sacados de las notas de Strava', async () => {
+      const t = await page.innerText('.sesion:has-text("Ruta Amagá")');
+      assert.ok(t.includes('56 km') && t.includes('1.368 m de desnivel') && t.includes('3 h 23'), t);
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'entreno.png'), fullPage: true });
+    });
+    await prueba('semana anterior y vuelta', async () => {
+      await page.click('[aria-label="Semana anterior de entreno"]');
+      await page.waitForFunction(() => !/Esta semana/.test(document.querySelector('.hero-ent .hero-t').textContent));
+      assert.ok((await page.innerText('.app')).includes('Jalón al frente'), 'la sesión de hace 7 días');
+      await page.click('[aria-label="Semana siguiente de entreno"]');
+      await page.waitForSelector('.hero-ent .hero-t:has-text("Esta semana")');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
