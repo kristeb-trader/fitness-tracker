@@ -320,3 +320,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); out
 .cardio b { display: block; font-size: 17px; font-weight: 800; }
 .cardio small { font-size: 11px; color: var(--sub); font-weight: 700; }
 .ej-cab .nota { margin-top: 4px; }
+
+.dia-ent.sel { box-shadow: 0 0 0 3px var(--verde2); }
+.dia-ent:not(.on).sel { background: #fff; }
+.filtro-dia { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+.filtro-dia .pill.on { background: var(--ink); color: #fff; }

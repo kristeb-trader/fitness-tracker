@@ -200,6 +200,7 @@
   var estado = {
     fecha: hoy,
     pantalla: "hoy", // "hoy" o "progreso"
+    diaEntreno: null, // día elegido en Entreno (null = toda la semana)
     semanaEntreno: 0, // 0 = esta semana; −1 = la anterior…
     periodo: 30,     // Progreso: 7, 30, 90, "mes" o "fechas"
     rango: null,     // fechas elegidas a mano {desde, hasta}
@@ -519,7 +520,7 @@
         h("div", { class: "valor" }, sueno === null ? "—" : fmt(sueno, 1), " ", h("small", { text: "h" })),
         h("div", { class: "nota", text: sueno === null ? "Toca para registrar" : "Meta 8 h" + (sueno < 8 ? " · faltó " + fmt(8 - sueno, 1) + " h" : " ✓") })),
       h("button", { type: "button", class: "card tocable", "aria-label": d.ejercicio.length || grupos.length ? "Ver entreno" : "Registrar ejercicio",
-        onclick: function () { if (d.ejercicio.length || grupos.length) { estado.pantalla = "entreno"; estado.semanaEntreno = Math.round((lunesDe(estado.fecha) - lunesDe(hoy)) / 604800000); pintar(); window.scrollTo(0, 0); } else abrirAgregar("ejercicio"); } },
+        onclick: function () { if (d.ejercicio.length || grupos.length) { estado.pantalla = "entreno"; estado.semanaEntreno = Math.round((lunesDe(estado.fecha) - lunesDe(hoy)) / 604800000); estado.diaEntreno = estado.fecha; pintar(); window.scrollTo(0, 0); } else abrirAgregar("ejercicio"); } },
         h("div", { class: "cab" }, h("span", { class: "chip-ico", style: "background:#FFF1E2", text: "🏋️" }), h("span", { text: "Entreno" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", { class: "valor valor-t", text: entrenoTxt }),
         h("div", { class: "nota", text: entrenoSub }))));
@@ -1114,9 +1115,10 @@
     var EMO = { gym: "💪", bici: "🚴", caminata: "🚶" };
 
     // Semana: sesiones, tiempo, kcal y kg levantados
-    var ses = 0, minutos = 0, kcal = 0, kg = 0, nivel = {};
+    var ses = 0, minutos = 0, kcal = 0, kg = 0, nivelSemana = {}, nivelDia = {};
+    var elegido = dias.indexOf(estado.diaEntreno) >= 0 ? estado.diaEntreno : null; // null = toda la semana
     dias.forEach(function (f) {
-      var ej = ejDe(f), se = serDe(f);
+      var ej = ejDe(f), se = serDe(f), nivel = nivelDia[f] = {};
       ses += ej.length + (se.length && !ej.some(function (x) { return x.tipo === "gym"; }) ? 1 : 0);
       ej.forEach(function (x) { minutos += Number(x.duracion_min) || 0; kcal += Number(x.kcal) || 0; });
       se.forEach(function (s) {
@@ -1129,19 +1131,22 @@
       if (!se.length) ej.filter(function (x) { return x.tipo === "gym"; }).forEach(function (x) {
         infoEjercicio((x.notas || "") + " " + (x.rutina || "")).principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 3; });
       });
+      Object.keys(nivel).forEach(function (g) { nivelSemana[g] = (nivelSemana[g] || 0) + nivel[g]; });
     });
+    var nivel = elegido ? nivelDia[elegido] : nivelSemana;
     var etiquetaSemana = (estado.semanaEntreno || 0) === 0 ? "Esta semana" : corta(dias[0]) + " – " + corta(dias[6]);
     raiz.appendChild(h("div", { class: "hero hero-ent" },
       h("div", { class: "sem-cab" },
-        h("button", { class: "mini-nav", "aria-label": "Semana anterior de entreno", onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) - 1; pintar(); } }, icono("atras", 16)),
+        h("button", { class: "mini-nav", "aria-label": "Semana anterior de entreno", onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) - 1; estado.diaEntreno = null; pintar(); } }, icono("atras", 16)),
         h("div", { class: "hero-t", text: etiquetaSemana }),
-        h("button", { class: "mini-nav", "aria-label": "Semana siguiente de entreno", disabled: (estado.semanaEntreno || 0) >= 0, onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) + 1; pintar(); } }, icono("sig", 16))),
+        h("button", { class: "mini-nav", "aria-label": "Semana siguiente de entreno", disabled: (estado.semanaEntreno || 0) >= 0, onclick: function () { estado.semanaEntreno = (estado.semanaEntreno || 0) + 1; estado.diaEntreno = null; pintar(); } }, icono("sig", 16))),
       h("div", { class: "sem-ent" }, dias.map(function (f) {
         var tipos = ejDe(f).map(function (x) { return x.tipo; });
         if (serDe(f).length && tipos.indexOf("gym") < 0) tipos.push("gym");
         var d = deISO(f);
-        return h("button", { type: "button", class: "dia-ent" + (tipos.length ? " on" : "") + (f > hoy ? " fut" : ""), "aria-label": fechaLarga(f) + (tipos.length ? ": " + tipos.join(", ") : ": descanso"),
-          onclick: function () { var el = document.getElementById("ses-" + f); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } },
+        return h("button", { type: "button", class: "dia-ent" + (tipos.length ? " on" : "") + (f > hoy ? " fut" : "") + (f === elegido ? " sel" : ""), "aria-pressed": f === elegido ? "true" : "false",
+          "aria-label": fechaLarga(f) + (tipos.length ? ": " + tipos.join(", ") : ": descanso") + (f === elegido ? " (elegido)" : ""),
+          onclick: function () { estado.diaEntreno = f === elegido ? null : f; pintar(); } },
           h("small", { text: DIAS_CORTO[(d.getDay() + 6) % 7] }), h("span", { text: tipos.length ? tipos.map(function (t) { return EMO[t] || "🏃"; }).join("") : "·" }));
       })),
       h("div", { class: "kp-ent" },
@@ -1164,16 +1169,21 @@
 
     // Músculos trabajados
     var gruposSem = Object.keys(nivel).sort(function (a, b) { return nivel[b] - nivel[a]; });
-    raiz.appendChild(h("div", { class: "graf" }, h("h3", { text: "Músculos trabajados" }),
-      h("div", { class: "d", text: etiquetaSemana + " · más oscuro = más series" }),
+    var cuando = elegido ? fechaLarga(elegido) : etiquetaSemana;
+    var selector = h("div", { class: "filtro-dia", role: "group", "aria-label": "Qué músculos ver" },
+      h("button", { type: "button", class: "pill" + (elegido ? "" : " on"), "aria-pressed": elegido ? "false" : "true", text: "Toda la semana", onclick: function () { estado.diaEntreno = null; pintar(); } }),
+      h("button", { type: "button", class: "pill" + (elegido ? " on" : ""), "aria-pressed": elegido ? "true" : "false", text: elegido ? fechaLarga(elegido) : "Un día (toca uno arriba)",
+        onclick: function () { if (!elegido) { var u = dias.filter(function (f) { return f <= hoy && (ejDe(f).length || serDe(f).length); }).pop(); if (u) { estado.diaEntreno = u; pintar(); } } } }));
+    raiz.appendChild(h("div", { class: "graf" }, h("h3", { text: "Músculos trabajados" }), selector,
+      h("div", { class: "d", text: cuando + " · más oscuro = más series" }),
       h("div", { class: "cuerpo-fig" }, figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
       leyenda([["#E3E8E0", "Sin trabajar"], ["#B8E68F", "Poco"], ["#2FA36B", "Medio"], ["#0E6B47", "Mucho"]]),
       gruposSem.length ? h("div", { class: "chips-m" }, gruposSem.map(function (g) { return h("span", { text: GRUPOS[g] + " · " + fmt(nivel[g], 0) + " series" }); }))
-        : h("div", { class: "nota", text: "Aún no hay series de gym esta semana." })));
+        : h("div", { class: "nota", text: elegido ? "Ese día no hubo gym." : "Aún no hay series de gym esta semana." })));
 
     // Sesiones de la semana (lo más reciente primero)
-    var conSesion = dias.filter(function (f) { return ejDe(f).length || serDe(f).length; }).reverse();
-    if (!conSesion.length) raiz.appendChild(h("div", { class: "vacio", text: "Sin entrenamientos esta semana. Toca + para registrar tu ejercicio." }));
+    var conSesion = dias.filter(function (f) { return (!elegido || f === elegido) && (ejDe(f).length || serDe(f).length); }).reverse();
+    if (!conSesion.length) raiz.appendChild(h("div", { class: "vacio", text: elegido ? "Ese día no hay entrenamientos." : "Sin entrenamientos esta semana. Toca + para registrar tu ejercicio." }));
     conSesion.forEach(function (f) {
       var ej = ejDe(f), grupos = agruparSeries(serDe(f));
       var gym = ej.filter(function (x) { return x.tipo === "gym"; })[0];

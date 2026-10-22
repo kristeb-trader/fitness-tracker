@@ -513,6 +513,18 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const chips = await page.innerText('.chips-m');
       assert.ok(chips.includes('Espalda') && chips.includes('Bíceps'), chips);
     });
+    await prueba('filtrar por día: el muñeco y las sesiones muestran solo ese día', async () => {
+      const semana = await page.innerText('.chips-m');
+      await page.locator('.dia-ent.on').last().click();
+      await page.waitForSelector('.filtro-dia .pill.on:not(:has-text("Toda la semana"))');
+      const dia = await page.innerText('.graf:has(h3:text-is("Músculos trabajados")) .chips-m');
+      assert.ok(dia.includes('Espalda'), dia);
+      assert.strictEqual(await page.locator('.sesion').count(), 2, 'solo las sesiones de ese día (gym y bici)');
+      assert.ok(!(await page.innerText('.app')).includes('Caminata'), 'la caminata de otro día no sale');
+      await page.click('.filtro-dia .pill:has-text("Toda la semana")');
+      await page.waitForFunction(() => document.querySelectorAll('.sesion').length >= 3);
+      assert.strictEqual(await page.innerText('.chips-m'), semana);
+    });
     await prueba('cada ejercicio con su foto, sus series y la comparación con la vez anterior', async () => {
       const card = page.locator('.ej:has(b:text-is("Jalón al frente"))');
       const src = await card.locator('.foto-ej img').getAttribute('src');
