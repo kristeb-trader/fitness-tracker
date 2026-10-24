@@ -493,6 +493,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     serie('b1', hoy, 'Jalón al frente', 1, 40, 12); serie('b2', hoy, 'Jalón al frente', 2, 45, 10); serie('b3', hoy, 'Jalón al frente', 3, 50, 8);
     serie('c1', hoy, 'Remo bajo', 1, 45, 12);
     serie('d1', hoy, 'Curl martillo', 1, 12, 12);
+    serie('f1', hoy, 'Cristos Invertidos En Maquina', 1, 25, 12);
     s.hojas.ejercicio.filas.push(['e1', hoy, 'gym', 80, 350, 'estimado', '', '', '']);
     s.hojas.ejercicio.filas.push(['e2', hoy, 'bici', 203, 2035, 'strava', '', 'Ruta Amagá: 56 km, 1.368 m de desnivel', '']);
     s.hojas.ejercicio.filas.push(['e3', hace(1), 'caminata', 30, 120, 'manual', '', '', '']);
@@ -505,7 +506,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.nav [aria-label="Entreno"]');
       await page.waitForSelector('.titulo:has-text("Entreno")');
       const kp = await page.innerText('.kp-ent');
-      assert.ok(kp.includes('2.014') && kp.includes('kg levantados'), kp);
+      assert.ok(kp.includes('2.314') && kp.includes('kg levantados'), kp);
       assert.ok((await page.innerText('.racha')).includes('🔥 2 días'));
     });
     await prueba('músculos trabajados: figura de frente y espalda, con espalda y bíceps', async () => {
@@ -534,6 +535,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const t = await card.innerText();
       assert.ok(t.includes('🏆 Récord: 50 kg') && t.includes('▲ 5 kg') && t.includes('Volumen 1.330 kg') && /% vs el/.test(t), t);
       assert.ok((await page.innerText('.ej:has(b:text-is("Curl martillo"))')).includes('Bíceps'));
+    });
+    await prueba('«Cristos Invertidos En Maquina» (nombre de Smart Fit) usa la foto de la máquina, no la de mancuernas', async () => {
+      const src = await page.locator('.ej:has(b:text-is("Cristos Invertidos En Maquina")) .foto-ej img').getAttribute('src');
+      assert.ok(src.endsWith('Reverse_Machine_Flyes/0.jpg'), src);
     });
     await prueba('historial del ejercicio con su gráfica', async () => {
       await page.click('[aria-label="Historial de Jalón al frente"]');

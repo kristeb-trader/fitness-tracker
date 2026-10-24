@@ -925,6 +925,8 @@
     cuadriceps: "Cuádriceps", femorales: "Femorales", gluteos: "Glúteos", aductores: "Aductores", pantorrillas: "Pantorrillas" };
   // [palabras (expresión), foto, músculos principales, secundarios]. Lo más específico va primero.
   var CATALOGO_EJ = [
+    [/cristo.*invertid|invertid.*cristo|pajaro.*maquina|maquina.*pajaro|deltoide.*posterior.*maquina|posterior.*maquina|reverse.*fly|apertura.*invertid|peck.*invertid/, "Reverse_Machine_Flyes", ["hombros"], ["espalda"]],
+    [/cristo/, "Butterfly", ["pecho"], ["hombros"]],
     [/press.*inclinad|inclinad.*press/, "Barbell_Incline_Bench_Press_-_Medium_Grip", ["pecho"], ["hombros", "triceps"]],
     [/press.*declinad/, "Decline_Barbell_Bench_Press", ["pecho"], ["triceps"]],
     [/press.*(banca|plano).*(mancuerna)|press.*mancuerna.*(pecho|banca)/, "Dumbbell_Bench_Press", ["pecho"], ["triceps", "hombros"]],
@@ -1522,7 +1524,7 @@
       "",
       "Valores permitidos: tipo_comida = desayuno | almuerzo | cena | snack. tipo (ejercicio) = gym | bici | caminata. fuente = manual | estimado | strava.",
       "El sueño lo registro cada día; el peso y la cintura solo cada 3 meses. En medidas incluye solo lo que te dé. En series_gym, 4 series de 8 con 60 kg son 4 registros (numero_serie 1 a 4).",
-      "Gym: registra cada serie en series_gym (ejercicio con su nombre común en español, por ejemplo «Jalón al frente», «Remo bajo», «Press banca»; en «rutina» el nombre del día, por ejemplo «Espalda y bíceps») y además UN registro de ejercicio tipo gym con la duración y las kcal de la sesión.",
+      "Gym: registra cada serie en series_gym (ejercicio con el nombre EXACTO que muestra la app de Smart Fit, sin traducirlo ni cambiarlo, por ejemplo «Cristos Invertidos En Maquina»; en «rutina» el nombre del día, por ejemplo «Espalda y bíceps») y además UN registro de ejercicio tipo gym con la duración y las kcal de la sesión.",
       "Ejemplo de bloque final: [ {registro}, {registro} ]. No inventes datos que no te dije."
     ].join("\n");
   }
