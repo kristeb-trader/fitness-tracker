@@ -558,6 +558,16 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('[aria-label="Semana siguiente de entreno"]');
       await page.waitForSelector('.hero-ent .hero-t:has-text("Esta semana")');
     });
+    await prueba('cambiar el nombre de un ejercicio en todas sus series corrige la foto', async () => {
+      await page.locator('.ej:has(b:text-is("Curl martillo")) .ej-editar').click();
+      await page.locator('dialog summary:has-text("La foto no es la correcta")').click();
+      await page.fill('#f-nuevo-nombre', 'Cristos Invertidos En Maquina');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Cambiar el nombre en 1 serie")');
+      await page.waitForSelector('text=Listo: 1 serie cambiada');
+      const nombres = s.hojas.series_gym.filas.slice(1).map((f) => f[3]);
+      assert.ok(!nombres.includes('Curl martillo') && nombres.filter((n) => n === 'Cristos Invertidos En Maquina').length === 2, nombres.join('|'));
+    });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
   }

@@ -1797,9 +1797,43 @@
       ["Fuente", e.fuente], ["Notas", e.notas]
     ]), botonBorrar("ejercicio", e.id)));
   }
+  /** Cambia el nombre de un ejercicio en TODAS sus series guardadas (agrega la serie con el nombre nuevo y borra la vieja). */
+  function renombrarEjercicio(viejo, nuevo, boton) {
+    var k = sinTildes(viejo);
+    var lista = estado.tablas.series_gym.filter(function (s) { return sinTildes(s.ejercicio) === k && s.id; });
+    var total = lista.length, hechos = 0, fallos = 0, parar = null;
+    boton.disabled = true; boton.textContent = "Cambiando 0 de " + total + "…";
+    function trabajador() {
+      if (parar || !lista.length) return Promise.resolve();
+      var s = lista.shift();
+      var fila = { fecha: s.fecha, rutina: s.rutina, ejercicio: nuevo, numero_serie: s.numero_serie, peso_kg: s.peso_kg, repeticiones: s.repeticiones };
+      return api("agregar", { tabla: "series_gym", fila: fila })
+        .then(function () { return api("borrar", { tabla: "series_gym", id: s.id }); })
+        .catch(function (e) { if (e && e.noAutorizado) parar = e; else fallos++; })
+        .then(function () { hechos++; boton.textContent = "Cambiando " + hechos + " de " + total + "…"; return trabajador(); });
+    }
+    return Promise.all([trabajador(), trabajador()]).then(function () {
+      if (parar) throw parar;
+      cerrarHoja();
+      aviso(fallos ? "Cambié " + (total - fallos) + " y fallaron " + fallos + ". Revisa y vuelve a intentar." : "Listo: " + plural(total, "serie cambiada", "series cambiadas") + " a «" + nuevo + "»", !!fallos);
+      cargar();
+    }).catch(function (e) { boton.disabled = false; manejarError(e); });
+  }
+
   function detalleGym(g) {
+    var cuantas = estado.tablas ? estado.tablas.series_gym.filter(function (s) { return sinTildes(s.ejercicio) === sinTildes(g.ejercicio); }).length : 0;
+    var nombre = h("input", { id: "f-nuevo-nombre", type: "text", value: g.ejercicio, "aria-label": "Nombre nuevo del ejercicio", maxlength: 80 });
+    var btnNombre = h("button", { class: "btn lima", type: "button", text: "Cambiar el nombre en " + plural(cuantas, "serie", "series"), onclick: function () {
+      var nuevo = nombre.value.trim();
+      if (!nuevo || sinTildes(nuevo) === sinTildes(g.ejercicio) && nuevo === g.ejercicio) return aviso("Escribe el nombre nuevo.", true);
+      if (!confirm("¿Cambiar «" + g.ejercicio + "» por «" + nuevo + "» en " + plural(cuantas, "serie", "series") + " de todas las fechas?")) return;
+      renombrarEjercicio(g.ejercicio, nuevo, btnNombre);
+    } });
     abrirHoja(g.ejercicio, h("div", { style: "display:flex;flex-direction:column;gap:6px" },
       g.rutina ? h("p", { class: "ayuda", text: "Rutina: " + g.rutina }) : null,
+      estado.tablas ? h("details", { class: "avanzado" }, h("summary", { text: "La foto no es la correcta: cambiar el nombre del ejercicio" }),
+        h("p", { class: "ayuda", text: "La foto se busca por el nombre. Escribe el nombre exacto de Smart Fit (por ejemplo «Cristos Invertidos En Maquina»). Se cambia en todas las fechas." }),
+        nombre, btnNombre) : null,
       h("div", { class: "lista" }, g.series.map(function (s) {
         return h("div", { class: "item" },
           h("div", { class: "t" }, h("b", { text: "Serie " + fmt(s.numero_serie) }), h("span", { text: fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones) + " repeticiones" })),
