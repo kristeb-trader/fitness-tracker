@@ -991,16 +991,41 @@
   }
   function nombresGrupos(l) { return l.map(function (g) { return GRUPOS[g]; }).join(" · "); }
 
-  /** Foto del ejercicio (al tocarla cambia entre la posición inicial y la final). Sin foto: un icono. */
-  function fotoEjercicio(info) {
-    var caja = h("button", { type: "button", class: "foto-ej", "aria-label": "Ver la otra posición del ejercicio" });
+  /** Visor grande: la foto del ejercicio a pantalla casi completa, con las dos posiciones (1 y 2). */
+  function abrirVisorFoto(info, titulo, inicial) {
+    var dlg = h("dialog", { class: "visor", "aria-label": "Fotos de " + titulo });
+    var n = inicial || 0;
+    var img = h("img", { alt: "Posición " + (n + 1) + " de " + titulo, src: FOTOS_EJ + info.foto + "/" + n + ".jpg" });
+    var botones = [0, 1].map(function (k) {
+      return h("button", { type: "button", class: "visor-n" + (k === n ? " on" : ""), text: String(k + 1), "aria-label": "Ver la posición " + (k + 1) + (k === 0 ? " (inicial)" : " (final)"),
+        onclick: function () { ver(k); } });
+    });
+    function ver(k) {
+      n = k; img.src = FOTOS_EJ + info.foto + "/" + k + ".jpg"; img.alt = "Posición " + (k + 1) + " de " + titulo;
+      botones.forEach(function (b, q) { b.classList.toggle("on", q === k); });
+      txt.textContent = k === 0 ? "Posición inicial" : "Posición final";
+    }
+    var txt = h("span", { class: "visor-t", text: n === 0 ? "Posición inicial" : "Posición final" });
+    img.addEventListener("click", function () { ver(1 - n); });
+    dlg.appendChild(h("div", { class: "visor-caja" },
+      h("div", { class: "visor-cab" }, h("b", { text: titulo }), h("button", { type: "button", class: "icono-btn", "aria-label": "Cerrar", onclick: function () { dlg.close(); } }, icono("cerrar", 18))),
+      img,
+      h("div", { class: "visor-pie" }, botones[0], botones[1], txt),
+      h("p", { class: "ayuda visor-ayuda", text: "Toca la foto para cambiar de posición." })));
+    dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });
+    dlg.addEventListener("close", function () { if (dlg.parentNode) dlg.parentNode.removeChild(dlg); });
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  /** Foto del ejercicio: al tocarla se abre en grande, con las dos posiciones. Sin foto: un icono. */
+  function fotoEjercicio(info, titulo) {
+    var caja = h("button", { type: "button", class: "foto-ej", "aria-label": "Ver en grande la foto de " + (titulo || "el ejercicio") });
     if (!info.foto) { caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; return caja; }
-    var n = 0;
     var img = h("img", { src: FOTOS_EJ + info.foto + "/0.jpg", alt: "", loading: "lazy" });
-    var marca = h("span", { class: "foto-n", text: "1/2" });
     img.addEventListener("error", function () { caja.textContent = ""; caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; });
-    caja.addEventListener("click", function (e) { e.stopPropagation(); n = 1 - n; img.src = FOTOS_EJ + info.foto + "/" + n + ".jpg"; marca.textContent = (n + 1) + "/2"; });
-    caja.appendChild(img); caja.appendChild(marca);
+    caja.addEventListener("click", function (e) { e.stopPropagation(); abrirVisorFoto(info, titulo || "Ejercicio", 0); });
+    caja.appendChild(img); caja.appendChild(h("span", { class: "foto-n", text: "🔍 1 · 2" }));
     return caja;
   }
 
@@ -1064,7 +1089,7 @@
     var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals), pad = Math.max(2.5, (mx - mn) * 0.2);
     var marcas = marcasDe(Math.max(0, mn - pad), mx + pad, 3);
     abrirHoja(e.nombre, h("div", { style: "display:flex;flex-direction:column;gap:10px" },
-      h("div", { class: "ej-cab" }, fotoEjercicio(info), h("div", {}, h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) || "Ejercicio" }),
+      h("div", { class: "ej-cab" }, fotoEjercicio(info, e.nombre), h("div", {}, h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) || "Ejercicio" }),
         h("div", { class: "nota", text: plural(e.sesiones.length, "sesión", "sesiones") + " · mejor peso " + fmt(Math.max.apply(null, vals), 1) + " kg" }))),
       h("div", { class: "graf" }, h("h3", { text: "Peso máximo por sesión" }),
         grafica({ tipo: "linea", puntos: pts, min: Math.min(marcas[0], mn - pad / 2), max: Math.max(marcas[marcas.length - 1], mx + pad / 2), marcas: marcas, unir: true, color: COLOR.tinta, relleno: COLOR.lima, borde: COLOR.tinta, alto: 130,
@@ -1092,7 +1117,7 @@
     });
     var difVol = previa && previa.vol ? Math.round((vol - previa.vol) / previa.vol * 100) : null;
     return h("div", { class: "ej" },
-      h("div", { class: "ej-cab" }, fotoEjercicio(info),
+      h("div", { class: "ej-cab" }, fotoEjercicio(info, g.ejercicio),
         h("button", { type: "button", class: "ej-t", "aria-label": "Historial de " + g.ejercicio, onclick: function () { if (e) abrirHistorialEjercicio(e); } },
           h("b", { text: g.ejercicio }), h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) }), badge,
           h("span", { class: "ej-ver", text: "Ver historial ›" }))),

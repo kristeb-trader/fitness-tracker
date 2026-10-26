@@ -516,6 +516,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     });
     await prueba('filtrar por día: el muñeco y las sesiones muestran solo ese día', async () => {
       const semana = await page.innerText('.chips-m');
+      const totalSesiones = await page.locator('.sesion').count(); // depende del día de la semana en que se corre
       await page.locator('.dia-ent.on').last().click();
       await page.waitForSelector('.filtro-dia .pill.on:not(:has-text("Toda la semana"))');
       const dia = await page.innerText('.graf:has(h3:text-is("Músculos trabajados")) .chips-m');
@@ -523,7 +524,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(await page.locator('.sesion').count(), 2, 'solo las sesiones de ese día (gym y bici)');
       assert.ok(!(await page.innerText('.app')).includes('Caminata'), 'la caminata de otro día no sale');
       await page.click('.filtro-dia .pill:has-text("Toda la semana")');
-      await page.waitForFunction(() => document.querySelectorAll('.sesion').length >= 3);
+      await page.waitForFunction((n) => document.querySelectorAll('.sesion').length === n, totalSesiones);
       assert.strictEqual(await page.innerText('.chips-m'), semana);
     });
     await prueba('cada ejercicio con su foto, sus series y la comparación con la vez anterior', async () => {
@@ -531,7 +532,14 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const src = await card.locator('.foto-ej img').getAttribute('src');
       assert.ok(src.endsWith('Wide-Grip_Lat_Pulldown/0.jpg'), src);
       await card.locator('.foto-ej').click();
-      assert.ok((await card.locator('.foto-ej img').getAttribute('src')).endsWith('/1.jpg'), 'al tocar cambia de posición');
+      await page.waitForSelector('dialog.visor img');
+      assert.ok((await page.locator('dialog.visor img').getAttribute('src')).endsWith('Wide-Grip_Lat_Pulldown/0.jpg'), 'se abre en grande con la posición 1');
+      await page.click('dialog.visor .visor-n:has-text("2")');
+      assert.ok((await page.locator('dialog.visor img').getAttribute('src')).endsWith('Wide-Grip_Lat_Pulldown/1.jpg'), 'la posición 2 también en grande');
+      await page.click('dialog.visor img');
+      assert.ok((await page.locator('dialog.visor img').getAttribute('src')).endsWith('/0.jpg'), 'tocar la foto cambia de posición');
+      await page.click('dialog.visor [aria-label="Cerrar"]');
+      await page.waitForFunction(() => !document.querySelector('dialog.visor'));
       const t = await card.innerText();
       assert.ok(t.includes('🏆 Récord: 50 kg') && t.includes('▲ 5 kg') && t.includes('Volumen 1.330 kg') && /% vs el/.test(t), t);
       assert.ok((await page.innerText('.ej:has(b:text-is("Curl martillo"))')).includes('Bíceps'));
