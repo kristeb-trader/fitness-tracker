@@ -925,6 +925,7 @@
     cuadriceps: "Cuádriceps", femorales: "Femorales", gluteos: "Glúteos", aductores: "Aductores", pantorrillas: "Pantorrillas" };
   // [palabras (expresión), foto, músculos principales, secundarios]. Lo más específico va primero.
   var CATALOGO_EJ = [
+    [/(crunch|abdomin).*(maquina|selectorizada)|(maquina|selectorizada).*abdomin/, "Ab_Crunch_Machine", ["abdomen"], []],
     [/cristo.*invertid|invertid.*cristo|pajaro.*maquina|maquina.*pajaro|deltoide.*posterior.*maquina|posterior.*maquina|reverse.*fly|apertura.*invertid|peck.*invertid/, "Reverse_Machine_Flyes", ["hombros"], ["espalda"]],
     [/cristo/, "Butterfly", ["pecho"], ["hombros"]],
     [/press.*inclinad|inclinad.*press/, "Barbell_Incline_Bench_Press_-_Medium_Grip", ["pecho"], ["hombros", "triceps"]],
@@ -985,6 +986,8 @@
   function sinTildes(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
   function infoEjercicio(nombre) {
     var t = sinTildes(nombre);
+    var propia = leerPersonal()[t.trim()];
+    if (propia && propia.foto) return { foto: propia.foto, principales: propia.principales || [], secundarios: propia.secundarios || [] };
     for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) return { foto: CATALOGO_EJ[i][1], principales: CATALOGO_EJ[i][2], secundarios: CATALOGO_EJ[i][3] };
     var g = PALABRAS_GRUPO.filter(function (p) { return p[0].test(t); }).map(function (p) { return p[1]; });
     return { foto: null, principales: g.filter(function (x, k) { return g.indexOf(x) === k; }), secundarios: [] };
@@ -1839,6 +1842,8 @@
     }
     return Promise.all([trabajador(), trabajador()]).then(function () {
       if (parar) throw parar;
+      var pers = leerPersonal(), kv = sinTildes(viejo).trim();
+      if (pers[kv] && !fallos) { pers[sinTildes(nuevo).trim()] = pers[kv]; delete pers[kv]; guardarPersonal(pers); }
       cerrarHoja();
       aviso(fallos ? "Cambié " + (total - fallos) + " y fallaron " + fallos + ". Revisa y vuelve a intentar." : "Listo: " + plural(total, "serie cambiada", "series cambiadas") + " a «" + nuevo + "»", !!fallos);
       cargar();
@@ -1945,6 +1950,111 @@
       }))));
   }
 
+  // ---------- Ejercicios y fotos (Ajustes) ----------
+  var BD_EJ = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json";
+  var MUSC_EN = { chest: "pecho", lats: "espalda", "middle back": "espalda", "lower back": "espalda", traps: "espalda", shoulders: "hombros", biceps: "biceps", triceps: "triceps",
+    forearms: "antebrazo", abdominals: "abdomen", quadriceps: "cuadriceps", hamstrings: "femorales", glutes: "gluteos", adductors: "aductores", abductors: "gluteos", calves: "pantorrillas", neck: "hombros" };
+  var EQUIPOS = [["", "Todos"], ["machine", "Máquina"], ["cable", "Polea"], ["dumbbell", "Mancuernas"], ["barbell", "Barra"], ["body only", "Peso corporal"]];
+  var PALABRAS_BUSQUEDA = { maquina: "machine", selectorizada: "machine", polea: "cable", mancuerna: "dumbbell", mancuernas: "dumbbell", barra: "barbell", abdominal: "crunch", abdominales: "crunch",
+    jalon: "pulldown", remo: "row", sentadilla: "squat", prensa: "leg press", pierna: "leg", curl: "curl", biceps: "biceps", triceps: "triceps", hombro: "shoulder", pecho: "chest", espalda: "back",
+    cristos: "fly", invertidos: "reverse", apertura: "fly", elevacion: "raise", lateral: "lateral", frontal: "front", martillo: "hammer", fondos: "dips", plancha: "plank", gluteo: "glute", pantorrilla: "calf" };
+  var bdEjercicios = null;
+  function cargarBD() {
+    if (bdEjercicios) return Promise.resolve(bdEjercicios);
+    return fetch(BD_EJ).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (l) { bdEjercicios = l; return l; });
+  }
+
+  function leerPersonal() { try { return JSON.parse(leerLocal("ejercicios_personal") || "{}") || {}; } catch (e) { return {}; } }
+  function guardarPersonal(o) { guardarLocal("ejercicios_personal", JSON.stringify(o)); }
+
+  function nombresEjercicios() {
+    var cuenta = {};
+    (estado.tablas ? estado.tablas.series_gym : []).forEach(function (s) {
+      var n = String(s.ejercicio || "").trim(); if (!n) return;
+      var k = sinTildes(n); (cuenta[k] = cuenta[k] || { nombre: n, n: 0 }).n++;
+    });
+    return Object.keys(cuenta).map(function (k) { return cuenta[k]; }).sort(function (a, b) { return a.nombre < b.nombre ? -1 : 1; });
+  }
+
+  function abrirEjerciciosFotos() {
+    var personal = leerPersonal(), lista = nombresEjercicios();
+    abrirHoja("Ejercicios y fotos", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
+      h("p", { class: "ayuda", text: "Aquí corriges el nombre de un ejercicio o eliges otra foto. Toca un ejercicio." }),
+      lista.length ? h("div", { class: "lista" }, lista.map(function (e) {
+        var inf = infoEjercicio(e.nombre), propia = !!personal[sinTildes(e.nombre)];
+        var mini = h("span", { class: "emo mini-foto" });
+        if (inf.foto) mini.appendChild(h("img", { src: FOTOS_EJ + inf.foto + "/0.jpg", alt: "", loading: "lazy" })); else mini.textContent = "🏋️";
+        return h("button", { class: "item con-emo", onclick: function () { abrirEditorEjercicio(e.nombre); } }, mini,
+          h("div", { class: "t" }, h("b", { text: e.nombre }), h("span", { text: plural(e.n, "serie", "series") + (propia ? " · foto elegida por ti" : inf.foto ? "" : " · sin foto") })));
+      })) : h("div", { class: "vacio", text: "Aún no hay ejercicios de gym registrados." })));
+  }
+
+  function abrirEditorEjercicio(nombre) {
+    var k = sinTildes(nombre), personal = leerPersonal(), inf = infoEjercicio(nombre);
+    var cuantas = estado.tablas.series_gym.filter(function (s) { return sinTildes(s.ejercicio) === k; }).length;
+    var campoNombre = h("input", { id: "f-nuevo-nombre", type: "text", value: nombre, maxlength: 80, "aria-label": "Nombre del ejercicio" });
+    var btnNombre = h("button", { class: "btn lima", type: "button", text: "Guardar el nombre en " + plural(cuantas, "serie", "series"), onclick: function () {
+      var nuevo = campoNombre.value.trim();
+      if (!nuevo || nuevo === nombre) return aviso("Escribe un nombre distinto.", true);
+      if (!confirm("¿Cambiar «" + nombre + "» por «" + nuevo + "» en " + plural(cuantas, "serie", "series") + " de todas las fechas?")) return;
+      renombrarEjercicio(nombre, nuevo, btnNombre);
+    } });
+    var foto = fotoEjercicio(inf, nombre);
+    var resultados = h("div", { class: "grid-fotos", "aria-live": "polite" });
+    var buscar = h("input", { id: "f-buscar-foto", type: "search", placeholder: "Busca (por ejemplo: crunch, fly, press, machine)", "aria-label": "Buscar foto" });
+    var estadoBD = h("p", { class: "ayuda", text: "" });
+    var filtro = { grupo: "", equipo: "" };
+    var chipsGrupo = h("div", { class: "chips" }), chipsEquipo = h("div", { class: "chips" });
+    function pintarChips() {
+      chipsGrupo.textContent = ""; chipsEquipo.textContent = "";
+      [["", "Todos"]].concat(Object.keys(GRUPOS).map(function (g) { return [g, GRUPOS[g]]; })).forEach(function (g) {
+        chipsGrupo.appendChild(h("button", { type: "button", class: g[0] === filtro.grupo ? "on" : "", text: g[1], onclick: function () { filtro.grupo = g[0]; pintarChips(); mostrar(); } }));
+      });
+      EQUIPOS.forEach(function (q) {
+        chipsEquipo.appendChild(h("button", { type: "button", class: q[0] === filtro.equipo ? "on" : "", text: q[1], onclick: function () { filtro.equipo = q[0]; pintarChips(); mostrar(); } }));
+      });
+    }
+    function elegir(e) {
+      var pr = [], se = [];
+      (e.primaryMuscles || []).forEach(function (m) { if (MUSC_EN[m] && pr.indexOf(MUSC_EN[m]) < 0) pr.push(MUSC_EN[m]); });
+      (e.secondaryMuscles || []).forEach(function (m) { if (MUSC_EN[m] && pr.indexOf(MUSC_EN[m]) < 0 && se.indexOf(MUSC_EN[m]) < 0) se.push(MUSC_EN[m]); });
+      var p = leerPersonal(); p[k] = { foto: e.id, principales: pr, secundarios: se }; guardarPersonal(p);
+      cerrarHoja(); aviso("Foto elegida para «" + nombre + "»"); pintar();
+    }
+    function mostrar() {
+      resultados.textContent = "";
+      if (!bdEjercicios) return;
+      var q = sinTildes(buscar.value).split(/\s+/).filter(Boolean).map(function (w) { return PALABRAS_BUSQUEDA[w] || w; }).join(" ").split(/\s+/);
+      var hallados = bdEjercicios.filter(function (e) {
+        if (filtro.equipo && e.equipment !== filtro.equipo) return false;
+        if (filtro.grupo && !(e.primaryMuscles || []).some(function (m) { return MUSC_EN[m] === filtro.grupo; })) return false;
+        var nom = e.name.toLowerCase();
+        return q.every(function (w) { return !w || nom.indexOf(w) >= 0; });
+      });
+      if (!hallados.length) { resultados.appendChild(h("p", { class: "ayuda", text: "No encontré nada. Prueba con otra palabra o quita un filtro." })); return; }
+      hallados.slice(0, 60).forEach(function (e) {
+        resultados.appendChild(h("button", { type: "button", class: "foto-op", "aria-label": "Usar la foto de " + e.name, onclick: function () { elegir(e); } },
+          h("img", { src: FOTOS_EJ + e.images[0], alt: "", loading: "lazy" }), h("span", { text: e.name })));
+      });
+      if (hallados.length > 60) resultados.appendChild(h("p", { class: "ayuda", text: "Hay " + hallados.length + " resultados; se muestran 60. Afina la búsqueda." }));
+    }
+    buscar.addEventListener("input", mostrar);
+    pintarChips();
+    estadoBD.textContent = "Cargando fotos…";
+    cargarBD().then(function () { estadoBD.textContent = "Toca la foto que sí es:"; mostrar(); }, function () { estadoBD.textContent = "No pude cargar las fotos. Revisa tu internet e inténtalo otra vez."; });
+    var quitar = personal[k] ? h("button", { class: "btn sec", type: "button", text: "Quitar la foto que elegí (volver a la automática)", onclick: function () {
+      var p = leerPersonal(); delete p[k]; guardarPersonal(p); cerrarHoja(); aviso("Listo, vuelve la foto automática"); pintar();
+    } }) : null;
+    abrirHoja(nombre, h("div", { style: "display:flex;flex-direction:column;gap:8px" },
+      h("div", { class: "ej-cab" }, foto, h("div", {}, h("div", { class: "ej-m", text: nombresGrupos(inf.principales.concat(inf.secundarios)) || "Sin músculos definidos" }),
+        h("div", { class: "nota", text: personal[k] ? "Foto elegida por ti" : inf.foto ? "Foto automática" : "Sin foto" }))),
+      h("h4", { text: "Nombre" }),
+      h("p", { class: "ayuda", text: "Escribe el nombre como aparece en Smart Fit. Se cambia en todas las fechas." }),
+      campoNombre, btnNombre,
+      h("h4", { text: "Foto" }),
+      buscar, h("details", { class: "avanzado" }, h("summary", { text: "Filtrar por músculo o equipo" }), chipsGrupo, chipsEquipo), estadoBD, resultados, quitar));
+  }
+
   // ---------- Ajustes ----------
   function abrirDireccion() {
     var actual = urlServicio();
@@ -2007,6 +2117,7 @@
       lineas(pares),
       h("p", { class: "ayuda", text: "Se cambian en la pestaña «metas» de tu hoja de Google." }),
       h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { if (estado.version < 2) estado.version = null; cerrarHoja(); cargar(); } }),
+      estado.tablas ? h("button", { class: "btn sec", text: "Ejercicios y fotos", onclick: function () { cerrarHoja(); abrirEjerciciosFotos(); } }) : null,
       estado.tablas ? h("button", { class: "btn sec", text: "Buscar registros repetidos", onclick: function () { cerrarHoja(); abrirRepetidos(); } }) : null,
       h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); olvidarDatos(); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
       avanzado

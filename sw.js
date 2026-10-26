@@ -1,6 +1,6 @@
 // Guarda solo los archivos de la app para que abra al instante. Tus datos nunca se guardan aquí.
 // Abre con lo guardado en el teléfono y, por detrás, descarga la versión nueva para la próxima vez.
-const CACHE = "seguimiento-v17";
+const CACHE = "seguimiento-v18";
 const ARCHIVOS = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

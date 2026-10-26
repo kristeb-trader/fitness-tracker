@@ -61,6 +61,12 @@ async function abrir(configJs, servicios) {
   await page.route('https://fonts.googleapis.com/**', (r) => r.abort());
   // Fotos de ejercicios: imagen mínima, sin salir a internet
   await page.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ status: 200, contentType: 'image/gif', body: Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64') }));
+  // Lista de ejercicios de la biblioteca de fotos (mínima, de prueba)
+  await page.route('https://raw.githubusercontent.com/**/dist/exercises.json', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+    { id: 'Ab_Crunch_Machine', name: 'Ab Crunch Machine', equipment: 'machine', primaryMuscles: ['abdominals'], secondaryMuscles: [], images: ['Ab_Crunch_Machine/0.jpg', 'Ab_Crunch_Machine/1.jpg'] },
+    { id: 'Crunches', name: 'Crunches', equipment: 'body only', primaryMuscles: ['abdominals'], secondaryMuscles: [], images: ['Crunches/0.jpg', 'Crunches/1.jpg'] },
+    { id: 'Butterfly', name: 'Butterfly', equipment: 'machine', primaryMuscles: ['chest'], secondaryMuscles: ['shoulders'], images: ['Butterfly/0.jpg', 'Butterfly/1.jpg'] }
+  ]) }));
   await page.route('https://fonts.gstatic.com/**', (r) => r.abort());
   const base = 'http://localhost:' + servidor.address().port + '/';
   const cerrar = async () => { await navegador.close(); servidor.close(); };
@@ -494,6 +500,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     serie('c1', hoy, 'Remo bajo', 1, 45, 12);
     serie('d1', hoy, 'Curl martillo', 1, 12, 12);
     serie('f1', hoy, 'Cristos Invertidos En Maquina', 1, 25, 12);
+    serie('g1', hoy, 'Crunch abdominal en máquina Evolve', 1, 0, 12);
     s.hojas.ejercicio.filas.push(['e1', hoy, 'gym', 80, 350, 'estimado', '', '', '']);
     s.hojas.ejercicio.filas.push(['e2', hoy, 'bici', 203, 2035, 'strava', '', 'Ruta Amagá: 56 km, 1.368 m de desnivel', '']);
     s.hojas.ejercicio.filas.push(['e3', hace(1), 'caminata', 30, 120, 'manual', '', '', '']);
@@ -575,6 +582,32 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('text=Listo: 1 serie cambiada');
       const nombres = s.hojas.series_gym.filas.slice(1).map((f) => f[3]);
       assert.ok(!nombres.includes('Curl martillo') && nombres.filter((n) => n === 'Cristos Invertidos En Maquina').length === 2, nombres.join('|'));
+    });
+    await prueba('«Crunch abdominal en máquina» usa la foto de la máquina abdominal', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      const src = await page.locator('.ej:has(b:text-is("Crunch abdominal en máquina Evolve")) .foto-ej img').getAttribute('src');
+      assert.ok(src.endsWith('Ab_Crunch_Machine/0.jpg'), src);
+    });
+    await prueba('Ajustes → Ejercicios y fotos: elegir otra foto para un ejercicio', async () => {
+      await page.click('.top [aria-label="Ajustes"]');
+      await page.click('dialog button:has-text("Ejercicios y fotos")');
+      await page.click('dialog .item:has-text("Remo bajo")');
+      await page.fill('#f-buscar-foto', 'crunch machine');
+      await page.waitForSelector('dialog .foto-op');
+      assert.strictEqual(await page.locator('dialog .foto-op').count(), 1, 'la búsqueda filtra');
+      await page.click('dialog [aria-label="Usar la foto de Ab Crunch Machine"]');
+      await page.waitForSelector('text=Foto elegida para «Remo bajo»');
+      const src = await page.locator('.ej:has(b:text-is("Remo bajo")) .foto-ej img').getAttribute('src');
+      assert.ok(src.endsWith('Ab_Crunch_Machine/0.jpg'), 'la foto elegida se usa en Entreno: ' + src);
+    });
+    await prueba('la foto elegida se puede quitar (vuelve la automática)', async () => {
+      await page.click('.top [aria-label="Ajustes"]');
+      await page.click('dialog button:has-text("Ejercicios y fotos")');
+      await page.click('dialog .item:has-text("Remo bajo")');
+      await page.click('dialog button:has-text("Quitar la foto que elegí")');
+      await page.waitForSelector('text=vuelve la foto automática');
+      const src = await page.locator('.ej:has(b:text-is("Remo bajo")) .foto-ej img').getAttribute('src');
+      assert.ok(src.endsWith('Seated_Cable_Rows/0.jpg'), src);
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
