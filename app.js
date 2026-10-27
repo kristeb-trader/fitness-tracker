@@ -926,6 +926,12 @@
   // [palabras (expresión), foto, músculos principales, secundarios]. Lo más específico va primero.
   var CATALOGO_EJ = [
     [/(crunch|abdomin).*(maquina|selectorizada)|(maquina|selectorizada).*abdomin/, "Ab_Crunch_Machine", ["abdomen"], []],
+    // Nombres tal como los muestra la app de Smart Fit (rutina de piernas)
+    [/pantorrilla.*(prensa|leg press)|(prensa|leg press).*pantorrilla/, "Calf_Press_On_The_Leg_Press_Machine", ["pantorrillas"], []],
+    [/desplante|zancada.*smith|smith.*zancada/, "Smith_Single-Leg_Split_Squat", ["cuadriceps"], ["gluteos"]],
+    [/abd+uctor|abduccion de cadera/, "Thigh_Abductor", ["gluteos"], []],
+    [/hip ?thrust|elevacion de cadera/, "Barbell_Hip_Thrust", ["gluteos"], ["femorales"]],
+    [/femoral.*(acostad|tumbad)|(acostad|tumbad).*femoral|curl.*(acostad|tumbad)/, "Lying_Leg_Curls", ["femorales"], []],
     [/cristo.*invertid|invertid.*cristo|pajaro.*maquina|maquina.*pajaro|deltoide.*posterior.*maquina|posterior.*maquina|reverse.*fly|apertura.*invertid|peck.*invertid/, "Reverse_Machine_Flyes", ["hombros"], ["espalda"]],
     [/cristo/, "Butterfly", ["pecho"], ["hombros"]],
     [/press.*inclinad|inclinad.*press/, "Barbell_Incline_Bench_Press_-_Medium_Grip", ["pecho"], ["hombros", "triceps"]],

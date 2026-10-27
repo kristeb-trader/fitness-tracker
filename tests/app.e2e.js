@@ -501,6 +501,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     serie('d1', hoy, 'Curl martillo', 1, 12, 12);
     serie('f1', hoy, 'Cristos Invertidos En Maquina', 1, 25, 12);
     serie('g1', hoy, 'Crunch abdominal en máquina Evolve', 1, 0, 12);
+    for (const n of ['Maquina Hack', 'Peso Muerto con Barra', 'Femoral Acostado Maquina', 'Pantorrilla En Prensa O Leg Press', 'Abdductor Abducción De Cadera Maquina', 'Elevación de Cadera Para Glúteos O Hiptrust', 'Desplante Fijo En Smith']) serie('s' + n.length, hoy, n, 1, 0, 10);
     s.hojas.ejercicio.filas.push(['e1', hoy, 'gym', 80, 350, 'estimado', '', '', '']);
     s.hojas.ejercicio.filas.push(['e2', hoy, 'bici', 203, 2035, 'strava', '', 'Ruta Amagá: 56 km, 1.368 m de desnivel', '']);
     s.hojas.ejercicio.filas.push(['e3', hace(1), 'caminata', 30, 120, 'manual', '', '', '']);
@@ -587,6 +588,14 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.nav [aria-label="Entreno"]');
       const src = await page.locator('.ej:has(b:text-is("Crunch abdominal en máquina Evolve")) .foto-ej img').getAttribute('src');
       assert.ok(src.endsWith('Ab_Crunch_Machine/0.jpg'), src);
+    });
+    await prueba('rutina de piernas de Smart Fit: cada nombre exacto con su foto', async () => {
+      const esperado = { 'Maquina Hack': 'Hack_Squat', 'Peso Muerto con Barra': 'Barbell_Deadlift', 'Femoral Acostado Maquina': 'Lying_Leg_Curls', 'Pantorrilla En Prensa O Leg Press': 'Calf_Press_On_The_Leg_Press_Machine',
+        'Abdductor Abducción De Cadera Maquina': 'Thigh_Abductor', 'Elevación de Cadera Para Glúteos O Hiptrust': 'Barbell_Hip_Thrust', 'Desplante Fijo En Smith': 'Smith_Single-Leg_Split_Squat' };
+      for (const [nombre, foto] of Object.entries(esperado)) {
+        const src = await page.locator('.ej:has(b:text-is("' + nombre + '")) .foto-ej img').getAttribute('src');
+        assert.ok(src.endsWith(foto + '/0.jpg'), nombre + ' → ' + src);
+      }
     });
     await prueba('Ajustes → Ejercicios y fotos: elegir otra foto para un ejercicio', async () => {
       await page.click('.top [aria-label="Ajustes"]');
