@@ -346,3 +346,6 @@ dialog.visor::backdrop { background: rgba(8, 20, 14, .85); }
 .foto-op { border: 0; background: #fff; border-radius: 14px; padding: 6px; display: flex; flex-direction: column; gap: 4px; text-align: left; box-shadow: var(--sombra); }
 .foto-op img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: #EEF1EB; }
 .foto-op span { font-size: 11.5px; font-weight: 700; color: var(--ink); line-height: 1.25; }
+
+.cmp-vieja .cmp-n, .cmp-vieja .cmp-u b { color: var(--sub); font-weight: 600; }
+.delta.vieja { background: transparent; box-shadow: inset 0 0 0 1px #DDE3DA; color: var(--sub); }

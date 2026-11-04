@@ -1256,26 +1256,32 @@
 
   /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */
   function tarjetaComparacion(med) {
-    var fechasGrupo = {};
+    var fechasGrupo = {}, masNueva = {};
+    // La fecha más reciente de cada grupo: los datos de una fecha anterior se marcan con su fecha
+    CAMPOS_MEDICION.forEach(function (c) {
+      med.lista.forEach(function (x) { if (!vacio(x[c[0]]) && x.fecha > (masNueva[c[4]] || "")) masNueva[c[4]] = x.fecha; });
+    });
     var filas = function (grupo) {
       return CAMPOS_MEDICION.filter(function (c) { return c[4] === grupo; }).map(function (c) {
-        var con = med.lista.filter(function (x) { return !vacio(x[c[0]]); });
+        // El peso de la báscula se compara con la bioimpedancia anterior (no con un peso suelto anotado otro día)
+        var con = med.lista.filter(function (x) { return !vacio(x[c[0]]) && (c[0] !== "peso_kg" || !vacio(x.grasa_pct) || med.lista.every(function (y) { return vacio(y.grasa_pct); })); });
         if (!con.length) return null;
         var u = con[con.length - 1], a = con.length > 1 ? con[con.length - 2] : null;
         var vu = Number(u[c[0]]), va = a ? Number(a[c[0]]) : null;
+        var vieja = u.fecha < masNueva[grupo]; // este dato no se midió en la última medición del grupo
         var fg = fechasGrupo[grupo] = fechasGrupo[grupo] || { u: "", a: "" };
-        if (u.fecha > fg.u) fg.u = u.fecha;
-        if (a && a.fecha > fg.a) fg.a = a.fecha;
+        if (!vieja) { if (u.fecha > fg.u) fg.u = u.fecha; if (a && a.fecha > fg.a) fg.a = a.fecha; }
         var unidad = c[2] ? " " + c[2] : "";
         var badge = null;
-        if (a) {
+        if (vieja) badge = h("span", { class: "delta vieja", text: "de " + corta(u.fecha), title: "No se midió en la última medición" });
+        else if (a) {
           var dl = vu - va, cero = Math.abs(dl) < Math.pow(10, -c[3]) / 2;
           var bueno = c[5] === "sube" ? dl > 0 : c[5] === "baja" ? dl < 0 : null;
           badge = h("span", { class: "delta" + (cero || bueno === null ? "" : bueno ? " up" : " dn"), text: cero ? "=" : (dl > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dl), c[3]) });
         }
-        return h("div", { class: "cmp-fila" },
+        return h("div", { class: "cmp-fila" + (vieja ? " cmp-vieja" : "") },
           h("span", { class: "cmp-n", text: c[1] }),
-          h("span", { class: "cmp-a", text: a ? fmt(va, c[3]) : "—", title: a ? corta(a.fecha) : "" }),
+          h("span", { class: "cmp-a", text: !vieja && a ? fmt(va, c[3]) : "—", title: a ? corta(a.fecha) : "" }),
           h("span", { class: "cmp-u" }, h("b", { text: fmt(vu, c[3]) }), unidad),
           badge || h("span", { class: "delta", text: "nuevo" }));
       }).filter(Boolean);

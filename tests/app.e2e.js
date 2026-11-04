@@ -631,6 +631,9 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     // Datos inventados: 2 mediciones de báscula de bioimpedancia y una con cinta métrica hoy
     const bloque = JSON.parse(fs.readFileSync(path.join(__dirname, 'medicion-ejemplo.json'), 'utf8'));
     bloque[2].fecha = hoy;
+    delete bloque[2].cadera_cm; // la cadera se midió antes, no en la última medición
+    const hace30 = new Date(); hace30.setDate(hace30.getDate() - 30);
+    s.post({ token: T, accion: 'medidas', fila: { fecha: isoLocal(hace30), cadera_cm: 99 } });
     const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
     await page.goto(base);
     await entrar(page, T);
@@ -643,7 +646,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('dialog button:has-text("Guardar 3 registros")');
       const v = await page.innerText('dialog .lista');
       assert.ok(v.includes('81 kg · grasa 24 % · músculo 35 kg · +15 datos más'), v);
-      assert.ok(v.includes('cintura 90 cm · +6 datos más'), v);
+      assert.ok(v.includes('cintura 90 cm · +5 datos más'), v);
       await page.click('dialog button:has-text("Guardar 3 registros")');
       await page.waitForSelector('text=3 registros guardados', { timeout: 15000 });
       const enc = s.hojas.medidas.filas[0];
@@ -661,6 +664,9 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok((await card.locator('.cmp-fila:has-text("Grasa corporal") .delta').getAttribute('class')).includes('up'), 'bajar grasa es bueno');
       assert.ok((await card.locator('.cmp-fila:has-text("Masa muscular") .delta').getAttribute('class')).includes('dn'), 'bajar músculo no es bueno');
       assert.ok((await card.locator('.cmp-fila:has-text("Pecho")').innerText()).includes('nuevo'));
+      // la cadera se midió hace 30 días y no en la última medición: se marca con su fecha, no como «nuevo»
+      const cadera = await card.locator('.cmp-fila:has-text("Cadera")').innerText();
+      assert.ok(/de \d+ \w+/.test(cadera) && !cadera.includes('nuevo'), cadera);
       await card.locator('summary:has-text("Por zona")').click();
       assert.ok((await card.locator('.cmp-fila:has-text("Grasa tronco")').innerText()).includes('▼ 1,5'));
       assert.ok((await page.innerText('.graf:has(h3:text-is("Grasa corporal"))')).includes('−1,2 %'));
