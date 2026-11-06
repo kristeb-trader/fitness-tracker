@@ -575,7 +575,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.hero-ent .hero-t:has-text("Esta semana")');
     });
     await prueba('cambiar el nombre de un ejercicio en todas sus series corrige la foto', async () => {
-      await page.locator('.ej:has(b:text-is("Curl martillo")) .ej-editar').click();
+      await page.locator('.ej:has(b:text-is("Curl martillo")) .ej-editar:not(.ej-como)').click();
       await page.locator('dialog summary:has-text("La foto no es la correcta")').click();
       await page.fill('#f-nuevo-nombre', 'Cristos Invertidos En Maquina');
       page.once('dialog', (d) => d.accept());
@@ -617,6 +617,59 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('text=vuelve la foto automática');
       const src = await page.locator('.ej:has(b:text-is("Remo bajo")) .foto-ej img').getAttribute('src');
       assert.ok(src.endsWith('Seated_Cable_Rows/0.jpg'), src);
+    });
+    await prueba('en Entreno, cada ejercicio trae «Cómo se hace» con su ficha', async () => {
+      await page.click('[aria-label="Cómo se hace Remo bajo"]');
+      await page.waitForSelector('dialog .ficha');
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('Remo bajo (polea)') && t.includes('Cómo hacerlo') && t.includes('Espalda media'), t);
+      await page.keyboard.press('Escape');
+    });
+    await prueba('biblioteca: se abre desde Entreno, con buscador y filtros por músculo y equipo', async () => {
+      await page.click('.btn-biblio');
+      await page.waitForSelector('.titulo:has-text("Ejercicios")');
+      assert.ok(await page.locator('.bib-card').count() >= 60, 'muchos ejercicios');
+      await page.fill('#f-buscar-ej', 'remo');
+      await page.waitForFunction(() => [...document.querySelectorAll('.bib-card b')].every((b) => /remo/i.test(b.textContent)));
+      const remos = await page.locator('.bib-card b').allInnerTexts();
+      assert.ok(remos.includes('Remo en máquina agarre neutro') && remos.includes('Remo bajo (polea)'), remos.join('|'));
+      assert.strictEqual(await page.locator('#f-buscar-ej').evaluate((el) => el === document.activeElement), true, 'el buscador no pierde el foco');
+      await page.fill('#f-buscar-ej', '');
+      await page.click('[aria-label="Filtrar por músculo"] button:text-is("Pierna")');
+      const pierna = await page.locator('.bib-card b').allInnerTexts();
+      assert.ok(pierna.includes('Sentadilla en máquina Hack') && !pierna.includes('Jalón al frente'), pierna.join('|'));
+      await page.click('[aria-label="Filtrar por músculo"] button:text-is("Espalda")');
+      await page.click('[aria-label="Filtrar por equipo"] button:text-is("Polea")');
+      const tags = await page.locator('.bib-card .tag:not(.lo-haces)').allInnerTexts();
+      assert.ok(tags.length >= 4 && tags.every((x) => x === 'Polea'), 'solo polea: ' + tags.join('|'));
+      await page.click('[aria-label="Filtrar por músculo"] button:text-is("Todos")');
+      await page.click('[aria-label="Filtrar por equipo"] button:text-is("Todo")');
+      if (CAPTURAS) { await page.waitForTimeout(3000); await page.screenshot({ path: path.join(CAPTURAS, 'biblioteca.png') }); }
+    });
+    await prueba('biblioteca: «Solo los que hago» con el último peso', async () => {
+      await page.click('.pill-mios');
+      const jalon = page.locator('.bib-card:has(b:text-is("Jalón al frente"))');
+      const t = await jalon.innerText();
+      assert.ok(t.includes('LO HACES') && t.includes('Último: 50 kg × 8'), t);
+      const todos = await page.locator('.bib-card').count();
+      assert.ok(todos >= 8 && todos < 20, 'solo los registrados: ' + todos);
+      if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'biblio-mios.png') }); }
+    });
+    await prueba('ficha: fotos 1 y 2, músculos, cómo hacerlo, consejo y tus registros', async () => {
+      await page.click('.bib-card:has(b:text-is("Jalón al frente"))');
+      await page.waitForSelector('dialog .ficha');
+      assert.ok((await page.locator('dialog .ficha-foto img').nth(1).getAttribute('src')).endsWith('Wide-Grip_Lat_Pulldown/1.jpg'));
+      assert.strictEqual(await page.locator('dialog .ficha svg').count(), 2, 'figura de frente y espalda');
+      assert.ok(await page.locator('dialog .pasos li').count() >= 3);
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('Dorsales') && t.includes('💡') && t.includes('🏆 50 kg') && t.includes('2\nsesiones') && t.includes('«Jalón al frente»'), t);
+      if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'ficha.png') }); }
+      await page.click('dialog button:has-text("Ver historial")');
+      await page.waitForSelector('dialog >> text=2 sesiones');
+      await page.keyboard.press('Escape');
+      await page.click('.pill-mios');
+      await page.click('[aria-label="Volver a Entreno"]');
+      await page.waitForSelector('.titulo:has-text("Entreno")');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

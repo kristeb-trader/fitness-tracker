@@ -428,6 +428,7 @@
     if (estado.pantalla === "progreso") return pintarProgreso();
     if (estado.pantalla === "cuerpo") return pintarCuerpo();
     if (estado.pantalla === "entreno") return pintarEntreno();
+    if (estado.pantalla === "ejercicios") return pintarBiblioteca();
     return pintarHoy();
   }
 
@@ -923,78 +924,28 @@
   var FOTOS_EJ = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
   var GRUPOS = { pecho: "Pecho", espalda: "Espalda", hombros: "Hombros", biceps: "Bíceps", triceps: "Tríceps", antebrazo: "Antebrazo", abdomen: "Abdomen",
     cuadriceps: "Cuádriceps", femorales: "Femorales", gluteos: "Glúteos", aductores: "Aductores", pantorrillas: "Pantorrillas" };
-  // [palabras (expresión), foto, músculos principales, secundarios]. Lo más específico va primero.
-  var CATALOGO_EJ = [
-    [/(crunch|abdomin).*(maquina|selectorizada)|(maquina|selectorizada).*abdomin/, "Ab_Crunch_Machine", ["abdomen"], []],
-    // Nombres tal como los muestra la app de Smart Fit (rutina de piernas)
-    [/pantorrilla.*(prensa|leg press)|(prensa|leg press).*pantorrilla/, "Calf_Press_On_The_Leg_Press_Machine", ["pantorrillas"], []],
-    [/desplante|zancada.*smith|smith.*zancada/, "Smith_Single-Leg_Split_Squat", ["cuadriceps"], ["gluteos"]],
-    [/abd+uctor|abduccion de cadera/, "Thigh_Abductor", ["gluteos"], []],
-    [/hip ?thrust|elevacion de cadera/, "Barbell_Hip_Thrust", ["gluteos"], ["femorales"]],
-    [/femoral.*(acostad|tumbad)|(acostad|tumbad).*femoral|curl.*(acostad|tumbad)/, "Lying_Leg_Curls", ["femorales"], []],
-    [/cristo.*invertid|invertid.*cristo|pajaro.*maquina|maquina.*pajaro|deltoide.*posterior.*maquina|posterior.*maquina|reverse.*fly|apertura.*invertid|peck.*invertid/, "Reverse_Machine_Flyes", ["hombros"], ["espalda"]],
-    [/cristo/, "Butterfly", ["pecho"], ["hombros"]],
-    [/press.*inclinad|inclinad.*press/, "Barbell_Incline_Bench_Press_-_Medium_Grip", ["pecho"], ["hombros", "triceps"]],
-    [/press.*declinad/, "Decline_Barbell_Bench_Press", ["pecho"], ["triceps"]],
-    [/press.*(banca|plano).*(mancuerna)|press.*mancuerna.*(pecho|banca)/, "Dumbbell_Bench_Press", ["pecho"], ["triceps", "hombros"]],
-    [/press.*(banca|plano)|bench/, "Barbell_Bench_Press_-_Medium_Grip", ["pecho"], ["triceps", "hombros"]],
-    [/chest press|press de pecho|press pecho|pecho articulado|press.*maquina.*pecho/, "Leverage_Chest_Press", ["pecho"], ["triceps", "hombros"]],
-    [/apertura|peck|pec deck|mariposa|\bfly\b|contractor/, "Butterfly", ["pecho"], []],
-    [/cruce|crossover/, "Cable_Crossover", ["pecho"], ["hombros"]],
-    [/fondo.*pecho|paralela/, "Dips_-_Chest_Version", ["pecho"], ["triceps"]],
-    [/flexion|push ?up/, "Pushups", ["pecho"], ["triceps", "hombros"]],
-    [/jalon.*tricep|tricep.*(polea|cuerda|jalon)|pushdown|extension.*tricep|tricep.*extension/, "Triceps_Pushdown", ["triceps"], []],
-    [/jalon.*(cerrad|estrech)/, "Close-Grip_Front_Lat_Pulldown", ["espalda"], ["biceps"]],
-    [/jalon|pulldown|polea al pecho/, "Wide-Grip_Lat_Pulldown", ["espalda"], ["biceps"]],
-    [/remo.*(bajo|sentad|polea|cerrad)/, "Seated_Cable_Rows", ["espalda"], ["biceps"]],
-    [/remo.*(pivote|\bt\b|landmine)/, "T-Bar_Row_with_Handle", ["espalda"], ["biceps"]],
-    [/remo.*mancuerna|serrucho/, "One-Arm_Dumbbell_Row", ["espalda"], ["biceps"]],
-    [/remo/, "Bent_Over_Barbell_Row", ["espalda"], ["biceps"]],
-    [/dominada|pull ?up/, "Pullups", ["espalda"], ["biceps"]],
-    [/pullover|brazos rectos/, "Straight-Arm_Pulldown", ["espalda"], []],
-    [/peso muerto rumano|rumano/, "Romanian_Deadlift", ["femorales"], ["gluteos", "espalda"]],
-    [/peso muerto/, "Barbell_Deadlift", ["espalda", "femorales"], ["gluteos"]],
-    [/hiperextension|lumbar/, "Hyperextensions_Back_Extensions", ["espalda"], ["gluteos"]],
-    [/press.*(militar|hombro)|hombro.*press/, "Dumbbell_Shoulder_Press", ["hombros"], ["triceps"]],
-    [/lateral/, "Side_Lateral_Raise", ["hombros"], []],
-    [/frontal/, "Front_Dumbbell_Raise", ["hombros"], []],
-    [/pajaro|posterior|face pull|vuelo inverso/, "Reverse_Flyes", ["hombros"], ["espalda"]],
-    [/encogimiento|trapecio/, "Barbell_Shrug", ["espalda"], []],
-    [/martillo/, "Hammer_Curls", ["biceps"], ["antebrazo"]],
-    [/predicador|scott/, "Preacher_Curl", ["biceps"], []],
-    [/curl.*(femoral|pierna)|femoral/, "Seated_Leg_Curl", ["femorales"], []],
-    [/curl|bicep/, "Dumbbell_Bicep_Curl", ["biceps"], ["antebrazo"]],
-    [/press frances|rompecraneo/, "EZ-Bar_Skullcrusher", ["triceps"], []],
-    [/fondo/, "Bench_Dips", ["triceps"], ["pecho"]],
-    [/tricep/, "Triceps_Pushdown", ["triceps"], []],
-    [/bulgar|split/, "Split_Squat_with_Dumbbells", ["cuadriceps"], ["gluteos"]],
-    [/hack/, "Hack_Squat", ["cuadriceps"], ["gluteos"]],
-    [/goblet|copa/, "Goblet_Squat", ["cuadriceps"], ["gluteos"]],
-    [/sentadilla.*smith|smith/, "Smith_Machine_Squat", ["cuadriceps"], ["gluteos"]],
-    [/sentadilla|squat/, "Barbell_Full_Squat", ["cuadriceps"], ["gluteos", "femorales"]],
-    [/prensa/, "Leg_Press", ["cuadriceps"], ["gluteos"]],
-    [/extension|cuadricep/, "Leg_Extensions", ["cuadriceps"], []],
-    [/zancada|estocada|lunge/, "Dumbbell_Lunges", ["cuadriceps"], ["gluteos"]],
-    [/hip thrust|empuje de cadera/, "Barbell_Hip_Thrust", ["gluteos"], ["femorales"]],
-    [/puente/, "Barbell_Glute_Bridge", ["gluteos"], ["femorales"]],
-    [/abductor/, "Thigh_Abductor", ["gluteos"], []],
-    [/aductor/, "Thigh_Adductor", ["aductores"], []],
-    [/pantorrilla.*sentad|gemelo.*sentad/, "Seated_Calf_Raise", ["pantorrillas"], []],
-    [/pantorrilla|gemelo|talon/, "Standing_Calf_Raises", ["pantorrillas"], []],
-    [/plancha/, "Plank", ["abdomen"], []],
-    [/elevacion de piernas|colgad/, "Hanging_Leg_Raise", ["abdomen"], []],
-    [/rueda/, "Ab_Roller", ["abdomen"], []],
-    [/abdomen|abdominal|crunch/, "Crunches", ["abdomen"], []]
-  ];
+  // Biblioteca de ejercicios en español (ejercicios.js): cómo se reconoce cada uno por su nombre, su foto,
+  // músculos y cómo hacerlo. Se revisa en orden: lo más específico va primero.
+  var BIBLIOTECA = window.BIBLIOTECA_EJ || [];
+  var CATALOGO_EJ = BIBLIOTECA.map(function (e) { return [e.re, e.f, e.p, e.s, e]; });
   // Palabras de la rutina o de las notas → grupos (para sesiones guardadas sin series)
   var PALABRAS_GRUPO = [[/pecho|pectoral/, "pecho"], [/espalda|dorsal/, "espalda"], [/hombro/, "hombros"], [/bicep/, "biceps"], [/tricep/, "triceps"],
     [/abdomen|abdominal/, "abdomen"], [/pierna/, "cuadriceps"], [/pierna|femoral/, "femorales"], [/pierna|gluteo/, "gluteos"], [/pantorrilla|gemelo/, "pantorrillas"], [/cuadricep/, "cuadriceps"]];
   function sinTildes(t) { return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  /** La ficha de la biblioteca que corresponde a un nombre (o null). Las reglas de respaldo usan la ficha visible con la misma foto. */
+  function fichaDe(nombre) {
+    var t = sinTildes(nombre);
+    for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) {
+      var e = CATALOGO_EJ[i][4];
+      return e.oculto ? BIBLIOTECA.filter(function (x) { return !x.oculto && x.f === e.f; })[0] || null : e;
+    }
+    return null;
+  }
   function infoEjercicio(nombre) {
     var t = sinTildes(nombre);
     var propia = leerPersonal()[t.trim()];
-    if (propia && propia.foto) return { foto: propia.foto, principales: propia.principales || [], secundarios: propia.secundarios || [] };
-    for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) return { foto: CATALOGO_EJ[i][1], principales: CATALOGO_EJ[i][2], secundarios: CATALOGO_EJ[i][3] };
+    if (propia && propia.foto) return { foto: propia.foto, principales: propia.principales || [], secundarios: propia.secundarios || [], ref: fichaDe(nombre) };
+    for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) return { foto: CATALOGO_EJ[i][1], principales: CATALOGO_EJ[i][2], secundarios: CATALOGO_EJ[i][3], ref: fichaDe(nombre) };
     var g = PALABRAS_GRUPO.filter(function (p) { return p[0].test(t); }).map(function (p) { return p[1]; });
     return { foto: null, principales: g.filter(function (x, k) { return g.indexOf(x) === k; }), secundarios: [] };
   }
@@ -1133,6 +1084,7 @@
       h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Serie" }), h("th", { text: "Peso" }), h("th", { text: "Reps" }), h("th", { class: "v", text: "vs anterior" }))), h("tbody", {}, filas)),
       h("div", { class: "tot" }, h("span", { text: "Volumen " + fmt(vol) + " kg" }),
         difVol === null ? null : h("span", { class: "badge " + (difVol >= 0 ? "up" : "dn"), text: (difVol >= 0 ? "▲ " : "▼ ") + Math.abs(difVol) + " % vs el " + corta(previa.fecha) }),
+        info.ref ? h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", "aria-label": "Cómo se hace " + g.ejercicio, onclick: function () { abrirFicha(info.ref); } }) : null,
         h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleGym(g); } })));
   }
 
@@ -1142,6 +1094,10 @@
     raiz.textContent = "";
     bandas();
     encabezado("Tu entrenamiento", "Entreno");
+    raiz.appendChild(h("button", { type: "button", class: "btn-biblio", onclick: function () { estado.pantalla = "ejercicios"; pintar(); window.scrollTo(0, 0); } },
+      h("span", { class: "emo", "aria-hidden": "true", text: "📚" }),
+      h("span", { class: "t" }, h("b", { text: "Biblioteca de ejercicios" }), h("small", { text: BIBLIOTECA.filter(function (e) { return !e.oculto; }).length + " ejercicios con foto, músculos y cómo hacerlos" })),
+      icono("sig", 18)));
     if (!estado.tablas) { raiz.appendChild(h("div", { class: "vacio", text: "Para ver tu entreno, la app necesita la versión nueva del servicio de Google." })); raiz.appendChild(navegacion("entreno")); return; }
     var T = estado.tablas, hist = historialEjercicios();
     var lunes = sumarDias(iso(lunesDe(hoy)), 7 * (estado.semanaEntreno || 0)), dias = [];
@@ -1252,6 +1208,169 @@
       });
     });
     raiz.appendChild(navegacion("entreno"));
+  }
+
+  // ---------- Biblioteca de ejercicios ----------
+  var FILTROS_MUSCULO = [["", "Todos"], ["pecho", "Pecho", ["pecho"]], ["espalda", "Espalda", ["espalda"]], ["hombros", "Hombros", ["hombros"]], ["biceps", "Bíceps", ["biceps", "antebrazo"]],
+    ["triceps", "Tríceps", ["triceps"]], ["pierna", "Pierna", ["cuadriceps", "femorales", "aductores", "pantorrillas"]], ["gluteos", "Glúteos", ["gluteos"]], ["abdomen", "Abdomen", ["abdomen"]]];
+  var FILTROS_EQUIPO = [["", "Todo"], ["maquina", "Máquina"], ["polea", "Polea"], ["mancuernas", "Mancuernas"], ["barra", "Barra"], ["smith", "Smith"], ["peso corporal", "Peso corporal"]];
+  var NOMBRE_EQUIPO = { maquina: "Máquina", polea: "Polea", mancuernas: "Mancuernas", barra: "Barra", smith: "Smith", "peso corporal": "Peso corporal" };
+  function seccionDe(e) {
+    for (var i = 1; i < FILTROS_MUSCULO.length; i++) if (FILTROS_MUSCULO[i][2].indexOf(e.p[0]) >= 0) return FILTROS_MUSCULO[i];
+    return FILTROS_MUSCULO[1];
+  }
+  /** Lo que has hecho de cada ficha: los nombres con que lo registras y sus sesiones (de la más vieja a la más nueva). */
+  function registrosPorFicha() {
+    var hist = historialEjercicios(), porFicha = [], sinFicha = [];
+    Object.keys(hist).forEach(function (k) {
+      var e = hist[k], f = fichaDe(e.nombre);
+      if (!f) { sinFicha.push(e); return; }
+      var i = BIBLIOTECA.indexOf(f);
+      var r = porFicha[i] = porFicha[i] || { nombres: [], ej: [], sesiones: [] };
+      r.nombres.push(e.nombre); r.ej.push(e);
+      e.sesiones.forEach(function (x) { r.sesiones.push(x); });
+    });
+    porFicha.forEach(function (r) { if (r) r.sesiones.sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; }); });
+    return { porFicha: porFicha, sinFicha: sinFicha };
+  }
+  function mejorSerie(x) {
+    return x.series.filter(function (s) { return (Number(s.peso_kg) || 0) === x.max; }).sort(function (a, b) { return (Number(b.repeticiones) || 0) - (Number(a.repeticiones) || 0); })[0] || x.series[0];
+  }
+  function textoSerie(s) { return Number(s.peso_kg) ? fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones) : fmt(s.repeticiones) + " reps"; }
+  function fotoBiblio(e, clase) {
+    var caja = h("span", { class: clase });
+    var img = h("img", { src: FOTOS_EJ + e.f + "/0.jpg", alt: "", loading: "lazy" });
+    img.addEventListener("error", function () { caja.textContent = "🏋️"; });
+    caja.appendChild(img);
+    return caja;
+  }
+
+  function pintarBiblioteca() {
+    raiz.textContent = "";
+    bandas();
+    var f = estado.biblio = estado.biblio || { q: "", musculo: "", equipo: "", mios: false };
+    raiz.appendChild(h("div", { class: "top" },
+      h("button", { class: "icono-btn", "aria-label": "Volver a Entreno", onclick: function () { estado.pantalla = "entreno"; pintar(); window.scrollTo(0, 0); } }, icono("atras", 20)),
+      h("div", { class: "top-centro" }, h("div", { class: "sub", text: "Entreno" }), h("div", { class: "titulo", text: "Ejercicios" })),
+      botonAjustes()));
+    var reg = estado.tablas ? registrosPorFicha() : { porFicha: [], sinFicha: [] };
+    var buscar = h("input", { id: "f-buscar-ej", type: "search", value: f.q, placeholder: "Busca: remo, polea, glúteo, jalón…", "aria-label": "Buscar ejercicio", autocomplete: "off" });
+    var chipsM = h("div", { class: "chips chips-scroll", role: "group", "aria-label": "Filtrar por músculo" });
+    var chipsE = h("div", { class: "chips chips-scroll", role: "group", "aria-label": "Filtrar por equipo" });
+    var mios = h("button", { type: "button", class: "pill-mios" });
+    var cuenta = h("div", { class: "nota", "aria-live": "polite" });
+    var lista = h("div", { class: "biblio" });
+    function chips() {
+      chipsM.textContent = ""; chipsE.textContent = "";
+      FILTROS_MUSCULO.forEach(function (m) {
+        chipsM.appendChild(h("button", { type: "button", class: f.musculo === m[0] ? "on" : "", "aria-pressed": f.musculo === m[0] ? "true" : "false", text: m[1], onclick: function () { f.musculo = m[0]; chips(); mostrar(); } }));
+      });
+      FILTROS_EQUIPO.forEach(function (q) {
+        chipsE.appendChild(h("button", { type: "button", class: f.equipo === q[0] ? "on" : "", "aria-pressed": f.equipo === q[0] ? "true" : "false", text: q[1], onclick: function () { f.equipo = q[0]; chips(); mostrar(); } }));
+      });
+      mios.className = "pill-mios" + (f.mios ? " on" : "");
+      mios.setAttribute("aria-pressed", f.mios ? "true" : "false");
+      mios.textContent = "⭐ Solo los que hago";
+    }
+    mios.addEventListener("click", function () { f.mios = !f.mios; chips(); mostrar(); });
+    function mostrar() {
+      lista.textContent = "";
+      var palabras = sinTildes(f.q).split(/[^a-z0-9ñ]+/).filter(Boolean);
+      var musc = FILTROS_MUSCULO.filter(function (m) { return m[0] === f.musculo; })[0];
+      var hallados = BIBLIOTECA.map(function (e, i) { return { e: e, r: reg.porFicha[i] }; }).filter(function (x) {
+        var e = x.e;
+        if (e.oculto) return false;
+        if (f.mios && !x.r) return false;
+        if (f.equipo && e.eq !== f.equipo) return false;
+        if (musc && musc[2] && !e.p.some(function (g) { return musc[2].indexOf(g) >= 0; })) return false;
+        var texto = sinTildes([e.n, e.t, e.tb, NOMBRE_EQUIPO[e.eq], e.p.concat(e.s).map(function (g) { return GRUPOS[g]; }).join(" "), x.r ? x.r.nombres.join(" ") : "", e.re.source.replace(/[^a-z ]+/g, " ")].join(" "));
+        return palabras.every(function (w) { return texto.indexOf(w) >= 0; });
+      });
+      // Los que haces van primero dentro de cada grupo
+      var secciones = {};
+      hallados.forEach(function (x) { var sc = seccionDe(x.e); (secciones[sc[0]] = secciones[sc[0]] || { nombre: sc[1], items: [] }).items.push(x); });
+      FILTROS_MUSCULO.slice(1).forEach(function (m) {
+        var sc = secciones[m[0]];
+        if (!sc) return;
+        sc.items.sort(function (a, b) { return (b.r ? 1 : 0) - (a.r ? 1 : 0) || (a.e.n < b.e.n ? -1 : 1); });
+        lista.appendChild(h("div", { class: "grupo-t", text: sc.nombre + " · " + sc.items.length }));
+        lista.appendChild(h("div", { class: "bib-lista" }, sc.items.map(function (x) {
+          var e = x.e, ult = x.r ? x.r.sesiones[x.r.sesiones.length - 1] : null;
+          return h("button", { type: "button", class: "bib-card", "aria-label": e.n + (x.r ? " (lo haces)" : ""), onclick: function () { abrirFicha(e); } },
+            fotoBiblio(e, "bib-foto"),
+            h("span", { class: "bib-t" },
+              h("b", { text: e.n }),
+              h("span", { class: "ej-m", text: nombresGrupos(e.p) + (e.s.length ? " · " + nombresGrupos(e.s) : "") }),
+              h("span", { class: "bib-tags" }, h("span", { class: "tag", text: NOMBRE_EQUIPO[e.eq] || e.eq }), x.r ? h("span", { class: "tag lo-haces", text: "LO HACES" }) : null),
+              ult ? h("span", { class: "nota", text: "Último: " + textoSerie(mejorSerie(ult)) + " · " + corta(ult.fecha) }) : null));
+        })));
+      });
+      // Ejercicios registrados que aún no tienen ficha
+      var sin = f.mios || palabras.length ? reg.sinFicha.filter(function (e) { return palabras.every(function (w) { return sinTildes(e.nombre).indexOf(w) >= 0; }); }) : [];
+      if (sin.length && !f.equipo && !f.musculo) {
+        lista.appendChild(h("div", { class: "grupo-t", text: "Registrados sin ficha · " + sin.length }));
+        lista.appendChild(h("div", { class: "lista" }, sin.map(function (e) {
+          return h("button", { class: "item con-emo", onclick: function () { abrirEditorEjercicio(e.nombre); } }, h("span", { class: "emo mini-foto", text: "🏋️" }),
+            h("div", { class: "t" }, h("b", { text: e.nombre }), h("span", { text: "Sin ficha todavía · toca para elegirle foto o corregir el nombre" })));
+        })));
+      }
+      cuenta.textContent = hallados.length ? plural(hallados.length, "ejercicio", "ejercicios") : "";
+      if (!hallados.length && !sin.length) lista.appendChild(h("div", { class: "vacio", text: f.mios ? "Con estos filtros no hay ejercicios que hayas registrado." : "No encontré ejercicios. Prueba con otra palabra o quita un filtro." }));
+    }
+    buscar.addEventListener("input", function () { f.q = buscar.value; mostrar(); });
+    chips();
+    raiz.appendChild(h("div", { class: "graf bib-filtros" }, buscar, chipsM, chipsE, h("div", { class: "bib-fila" }, mios, cuenta)));
+    raiz.appendChild(lista);
+    mostrar();
+    raiz.appendChild(navegacion("entreno"));
+  }
+
+  /** Ficha de un ejercicio: fotos (posición 1 y 2), músculos en la figura, cómo hacerlo y tus registros. */
+  function abrirFicha(e) {
+    var info = { foto: e.f, principales: e.p, secundarios: e.s };
+    var i = BIBLIOTECA.indexOf(e), r = estado.tablas ? registrosPorFicha().porFicha[i] : null;
+    var nivel = {};
+    e.s.forEach(function (g) { nivel[g] = 2; });
+    e.p.forEach(function (g) { nivel[g] = 12; });
+    var fotos = h("div", { class: "ficha-fotos" }, [0, 1].map(function (k) {
+      var b = h("button", { type: "button", class: "ficha-foto", "aria-label": "Ver en grande la posición " + (k + 1) + " de " + e.n, onclick: function () { abrirVisorFoto(info, e.n, k); } });
+      var img = h("img", { src: FOTOS_EJ + e.f + "/" + k + ".jpg", alt: "", loading: "lazy" });
+      img.addEventListener("error", function () { b.textContent = "🏋️"; b.disabled = true; });
+      b.appendChild(img); b.appendChild(h("span", { class: "foto-n", text: (k + 1) + (k === 0 ? " · inicio" : " · final") }));
+      return b;
+    }));
+    var tuyos;
+    if (r) {
+      var ult = r.sesiones[r.sesiones.length - 1];
+      var mejor = r.sesiones.reduce(function (a, x) { return !a || x.max > a.max ? x : a; }, null);
+      var fechas = {}; r.sesiones.forEach(function (x) { fechas[x.fecha] = true; });
+      tuyos = h("div", { class: "graf" }, h("h3", { text: "Tus registros" }),
+        h("div", { class: "d", text: "En tus registros se llama: " + r.nombres.map(function (n) { return "«" + n + "»"; }).join(", ") }),
+        h("div", { class: "kp-ficha" },
+          h("div", {}, h("b", { text: textoSerie(mejorSerie(ult)) }), h("small", { text: "Último · " + corta(ult.fecha) })),
+          h("div", {}, h("b", { text: "🏆 " + (mejor.max ? fmt(mejor.max, 1) + " kg" : textoSerie(mejorSerie(mejor))) }), h("small", { text: "Mejor · " + corta(mejor.fecha) })),
+          h("div", {}, h("b", { text: String(Object.keys(fechas).length) }), h("small", { text: Object.keys(fechas).length === 1 ? "sesión" : "sesiones" }))),
+        r.ej.map(function (x) {
+          return h("button", { type: "button", class: "btn sec", text: "Ver historial" + (r.ej.length > 1 ? " de «" + x.nombre + "»" : ""), onclick: function () { abrirHistorialEjercicio(x); } });
+        }));
+    } else {
+      tuyos = h("div", { class: "graf" }, h("h3", { text: "Tus registros" }),
+        h("p", { class: "ayuda", text: "Aún no lo has registrado. Cuando lo hagas, dile a Claude el nombre tal como sale en Smart Fit y aquí verás tu último peso, tu récord y el historial." }));
+    }
+    abrirHoja(e.n, h("div", { class: "ficha" },
+      fotos,
+      h("div", { class: "chips-m" }, h("span", { text: "🏋️ " + (NOMBRE_EQUIPO[e.eq] || e.eq) }), h("span", { text: e.niv === "intermedio" ? "📈 Intermedio" : "🌱 Principiante" }), r ? h("span", { class: "lo-haces", text: "⭐ Lo haces" }) : null),
+      h("div", { class: "graf" }, h("h3", { text: "Qué trabaja" }),
+        h("div", { class: "ficha-musc" },
+          h("div", { class: "cuerpo-fig" }, figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
+          h("div", { class: "ficha-txt" },
+            h("div", {}, h("small", { text: "Principal" }), h("b", { text: e.t })),
+            e.tb ? h("div", {}, h("small", { text: "También" }), h("b", { text: e.tb })) : null)),
+        leyenda([["#0E6B47", "Principal"], ["#B8E68F", "También"]])),
+      e.pasos.length ? h("div", { class: "graf" }, h("h3", { text: "Cómo hacerlo" }),
+        h("ol", { class: "pasos" }, e.pasos.map(function (p) { return h("li", { text: p }); })),
+        e.tip ? h("div", { class: "tip" }, h("span", { "aria-hidden": "true", text: "💡" }), h("span", { text: e.tip })) : null) : null,
+      tuyos));
   }
 
   /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */

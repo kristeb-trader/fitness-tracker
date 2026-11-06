@@ -311,10 +311,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); out
 .ej td .n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: #F1F4EE; font-size: 12px; }
 .ej .v { text-align: right; color: var(--sub); }
 .ej td.sube { color: #1E7A45; }
-.tot { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; color: var(--sub); margin-top: 6px; }
+.tot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; font-weight: 800; color: var(--sub); margin-top: 6px; }
 .tot .badge { margin-top: 0; }
 .ej-editar { margin-left: auto; border: 0; background: transparent; color: var(--link); font-weight: 800; font-size: 12.5px; padding: 6px 0; min-height: 32px; }
 .sesion > .ej-editar { display: block; margin-top: 4px; }
+.tot .ej-editar + .ej-editar { margin-left: 10px; }
 .cardio { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-top: 10px; }
 .cardio div { background: #F4F7F1; border-radius: 14px; padding: 10px; }
 .cardio b { display: block; font-size: 17px; font-weight: 800; }
@@ -349,3 +350,48 @@ dialog.visor::backdrop { background: rgba(8, 20, 14, .85); }
 
 .cmp-vieja .cmp-n, .cmp-vieja .cmp-u b { color: var(--sub); font-weight: 600; }
 .delta.vieja { background: transparent; box-shadow: inset 0 0 0 1px #DDE3DA; color: var(--sub); }
+
+/* Biblioteca de ejercicios */
+.btn-biblio { display: grid; grid-template-columns: 44px minmax(0, 1fr) 18px; align-items: center; gap: 12px; width: 100%; border: 0; text-align: left; background: var(--ink); color: #fff; border-radius: 20px; padding: 12px 14px; box-shadow: var(--sombra); }
+.btn-biblio .emo { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--lime); font-size: 22px; }
+.btn-biblio .t { display: flex; flex-direction: column; min-width: 0; }
+.btn-biblio b { font-size: 15px; font-weight: 800; }
+.btn-biblio small { font-size: 12px; color: #C9D6CE; font-weight: 600; }
+.top-centro { flex: 1; min-width: 0; }
+.bib-filtros { gap: 6px; }
+.bib-filtros input { margin-bottom: 2px; }
+.chips-scroll { flex-wrap: nowrap; overflow-x: auto; margin: 2px -16px; padding: 0 16px 2px; scrollbar-width: none; }
+.chips-scroll::-webkit-scrollbar { display: none; }
+.chips-scroll button { flex: none; }
+.bib-fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+.pill-mios { border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 12.5px; font-weight: 800; padding: 8px 12px; min-height: 36px; border-radius: 999px; }
+.pill-mios.on { background: #FFF1C7; border-color: #F0D58A; color: #8A5A00; }
+.biblio { display: flex; flex-direction: column; gap: 6px; }
+.bib-lista { display: flex; flex-direction: column; gap: 8px; }
+.bib-card { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; border: 0; text-align: left; background: #fff; border-radius: 20px; padding: 10px; box-shadow: var(--sombra); }
+.bib-foto { width: 96px; height: 72px; border-radius: 14px; overflow: hidden; background: #EEF1EB; display: grid; place-items: center; font-size: 26px; }
+.bib-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bib-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bib-t b { font-size: 14.5px; font-weight: 800; line-height: 1.25; }
+.bib-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.tag { font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 7px; background: #F1F4EE; color: var(--sub); }
+.tag.lo-haces { background: var(--lime); color: var(--ink); letter-spacing: .3px; }
+.ficha { display: flex; flex-direction: column; gap: 10px; }
+.ficha-fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ficha-foto { position: relative; border: 0; padding: 0; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; background: #EEF1EB; display: grid; place-items: center; font-size: 30px; }
+.ficha-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ficha-foto .foto-n { position: absolute; left: 6px; bottom: 6px; font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 7px; background: rgba(15, 42, 29, .78); color: #fff; }
+.chips-m .lo-haces { background: var(--lime); color: var(--ink); }
+.ficha-musc { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.ficha-musc .cuerpo-fig { gap: 6px; margin-top: 4px; }
+.ficha-musc .fig svg { width: 74px; height: auto; }
+.ficha-txt { display: flex; flex-direction: column; gap: 10px; }
+.ficha-txt small { display: block; font-size: 11px; font-weight: 800; color: var(--sub); text-transform: uppercase; letter-spacing: .4px; }
+.ficha-txt b { font-size: 14px; font-weight: 800; color: var(--verde2); }
+.pasos { margin: 6px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; }
+.pasos li::marker { font-weight: 800; color: var(--verde2); }
+.tip { display: flex; gap: 8px; align-items: flex-start; background: #FFF6DA; color: #5C4300; border-radius: 14px; padding: 10px 12px; font-size: 13px; font-weight: 700; margin-top: 8px; }
+.kp-ficha { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.kp-ficha div { background: #F7F9F5; border-radius: 14px; padding: 10px 8px; text-align: center; }
+.kp-ficha b { display: block; font-size: 14.5px; font-weight: 800; }
+.kp-ficha small { font-size: 11px; color: var(--sub); font-weight: 700; }
