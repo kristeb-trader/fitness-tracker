@@ -310,12 +310,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.top [aria-label="Ajustes"]');
       await page.waitForSelector('dialog >> text=Mis metas');
       await captura(page, 'ajustes-simple');
-      assert.ok(!(await page.innerText('dialog')).includes('versión 3'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
+      assert.ok(!(await page.innerText('dialog')).includes('versión 4'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
       await page.click('dialog summary:has-text("Opciones avanzadas")');
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('versión 3 (al día)') && t.includes('…'), t);
+      assert.ok(t.includes('versión 4 (al día)') && t.includes('…'), t);
       await page.click('dialog button:has-text("Copiar código del servicio")');
-      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 3'));
+      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 4'));
       await captura(page, 'ajustes');
     });
     await prueba('cambiar la dirección del servicio desde la app (sin tocar GitHub)', async () => {
@@ -736,6 +736,160 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('text=Grasa corporal: revisa el número');
       if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'form-medidas.png'), fullPage: true });
       await page.keyboard.press('Escape');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Mis rutinas: tarjetas con tus fotos');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    for (let n = 1; n <= 3; n++) s.post({ token: T, accion: 'agregar', tabla: 'series_gym', fila: { fecha: hoy, rutina: 'Pecho', ejercicio: 'Press banca plano', numero_serie: n, peso_kg: 40, repeticiones: 10 } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+    const RUT = 'Pecho - Hombro - Tríceps - Abdomen';
+    const colorCentro = (sel) => page.locator(sel).evaluate((img) => new Promise((ok) => {
+      const leer = () => { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const x = c.getContext('2d'); x.drawImage(img, 0, 0); ok([...x.getImageData(c.width >> 1, c.height >> 1, 1, 1).data].slice(0, 3)); };
+      if (img.complete && img.naturalWidth) leer(); else img.onload = leer;
+    }));
+
+    await prueba('Entreno → Mis rutinas → crear una rutina', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.btn-rutinas');
+      await page.waitForSelector('.titulo:text-is("Mis rutinas")');
+      assert.ok((await page.innerText('.app')).includes('Aún no tienes rutinas'));
+      await page.click('.nueva-rutina');
+      await page.fill('#f-rutina-nombre', RUT);
+      await page.click('dialog button:has-text("Crear y agregar")');
+      await page.waitForSelector('#f-tar-nombre');
+      assert.strictEqual(await page.innerText('.titulo'), RUT);
+    });
+    await prueba('el nombre llena solo los músculos y el último peso registrado', async () => {
+      await page.fill('#f-tar-nombre', 'Press banca plano');
+      assert.ok((await page.innerText('dialog .sug')).includes('Está en la biblioteca'));
+      assert.strictEqual(await page.inputValue('#f-tar-peso'), '40');
+      assert.strictEqual(await page.inputValue('#f-tar-series'), '3');
+      assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Pecho"]', 'aria-label'), 'Pecho (principal)');
+      assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Tríceps"]', 'aria-label'), 'Tríceps (también)');
+      await page.click('.chips-musc [aria-label^="Abdomen"]');
+      await page.click('.chips-musc [aria-label^="Abdomen"]');
+      assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Abdomen"]', 'aria-label'), 'Abdomen (también)', 'toca 2 veces = también');
+      await page.click('.chips-musc [aria-label^="Abdomen"]');
+      await page.fill('#f-tar-reps', '12');
+    });
+    await prueba('subir una imagen con A y B juntas la parte en dos (A izquierda, B derecha)', async () => {
+      await page.setInputFiles('input[aria-label="📷 Subir A y B juntas"]', path.join(__dirname, 'foto-ab.png'));
+      await page.waitForFunction(() => document.querySelectorAll('dialog .slot.lleno img').length === 2);
+      const [a, b] = [await colorCentro('dialog .slot.lleno img >> nth=0'), await colorCentro('dialog .slot.lleno img >> nth=1')];
+      assert.ok(a[0] > 150 && a[2] < 100, 'A es la mitad roja: ' + a);
+      assert.ok(b[2] > 150 && b[0] < 100, 'B es la mitad azul: ' + b);
+      if (CAPTURAS) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(CAPTURAS, 'tarjeta-editor.png') }); }
+    });
+    await prueba('guardar: la tarjeta y sus fotos quedan en tu hoja de Google', async () => {
+      await page.click('dialog button:has-text("Guardar tarjeta")');
+      await page.waitForSelector('text=Ejercicio agregado');
+      const enc = s.hojas.rutinas.filas[0], fila = s.hojas.rutinas.filas[1];
+      assert.strictEqual(fila[enc.indexOf('ejercicio')], 'Press banca plano');
+      assert.strictEqual(fila[enc.indexOf('peso_kg')], 40); assert.strictEqual(fila[enc.indexOf('repeticiones')], 12);
+      assert.strictEqual(fila[enc.indexOf('principales')], 'pecho');
+      assert.ok(fila[enc.indexOf('foto_a')] && fila[enc.indexOf('foto_b')] && fila[enc.indexOf('foto_a')] !== fila[enc.indexOf('foto_b')]);
+      assert.ok(s.hojas.fotos.getLastRow() >= 3, 'dos fotos guardadas');
+      const t = await page.innerText('.tarjeta-ej');
+      assert.ok(t.includes('Press banca plano') && t.includes('40 kg') && t.includes('3 × 12') && t.includes('último registro: 40 kg × 10') && t.includes('Trabaja') && t.includes('Pecho'), t);
+      assert.ok((await page.getAttribute('.tarjeta-ej .tar-foto img >> nth=1', 'src')).startsWith('data:image/jpeg'));
+    });
+    await prueba('una tarjeta sin fotos propias usa las de la biblioteca', async () => {
+      await page.click('.agregar-ej');
+      await page.fill('#f-tar-nombre', 'Press de pecho inclinado articulado');
+      await page.fill('#f-tar-peso', '25');
+      await page.click('dialog button:has-text("Guardar tarjeta")');
+      await page.waitForFunction(() => document.querySelectorAll('.tarjeta-ej').length === 2);
+      const card = page.locator('.tarjeta-ej >> nth=1');
+      assert.ok((await card.locator('.tar-foto img >> nth=0').getAttribute('src')).endsWith('Leverage_Incline_Chest_Press/0.jpg'));
+      const t = await card.innerText();
+      assert.ok(t.includes('25 kg') && t.includes('Pecho') && t.includes('Cómo se hace'), t);
+      if (CAPTURAS) { await page.waitForTimeout(2000); await page.screenshot({ path: path.join(CAPTURAS, 'rutina.png'), fullPage: true }); }
+    });
+    await prueba('ordenar con las flechas', async () => {
+      await page.click('[aria-label="Subir Press de pecho inclinado articulado"]');
+      await page.waitForFunction(() => document.querySelector('.tarjeta-ej b').textContent === 'Press de pecho inclinado articulado');
+      const enc = s.hojas.rutinas.filas[0];
+      const orden = Object.fromEntries(s.hojas.rutinas.filas.slice(1).map((f) => [f[enc.indexOf('ejercicio')], f[enc.indexOf('orden')]]));
+      assert.ok(orden['Press de pecho inclinado articulado'] < orden['Press banca plano'], JSON.stringify(orden));
+    });
+    await prueba('tocar tu foto la abre en grande con A y B', async () => {
+      await page.click('[aria-label="Ver en grande la foto A de Press banca plano"]');
+      await page.waitForSelector('dialog.visor img');
+      assert.ok((await page.getAttribute('dialog.visor img', 'src')).startsWith('data:image/jpeg'));
+      assert.strictEqual(await page.locator('dialog.visor .visor-n').count(), 2);
+      await page.click('dialog.visor [aria-label="Cerrar"]');
+    });
+    await prueba('en otro celular (sin copia local) las fotos llegan desde tu hoja', async () => {
+      await page.evaluate(() => new Promise((ok) => { const r = indexedDB.deleteDatabase('seguimiento-fotos'); r.onsuccess = r.onerror = r.onblocked = () => ok(); }));
+      await page.reload();
+      await page.waitForSelector('.hero');
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.btn-rutinas');
+      const card = page.locator('.rut-card');
+      assert.ok((await card.innerText()).includes('2 ejercicios'));
+      assert.ok((await page.getAttribute('.rut-card img', 'src')).endsWith('Leverage_Incline_Chest_Press/0.jpg'), 'la miniatura es la del primer ejercicio');
+      if (CAPTURAS) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(CAPTURAS, 'mis-rutinas.png') }); }
+      await card.click();
+      await page.waitForFunction(() => [...document.querySelectorAll('.tar-foto img')].filter((i) => i.src.startsWith('data:image/jpeg')).length === 2);
+    });
+    await prueba('editar: cambiar el peso y volver a las fotos de la biblioteca borra las tuyas', async () => {
+      await page.click('[aria-label="Editar Press banca plano"]');
+      await page.fill('#f-tar-peso', '42.5');
+      await page.click('dialog button:has-text("Usar la de la biblioteca")');
+      await page.click('dialog button:has-text("Guardar tarjeta")');
+      await page.waitForSelector('text=Tarjeta guardada');
+      await page.waitForFunction(() => document.body.innerText.includes('42,5 kg'));
+      assert.ok((await page.getAttribute('.tarjeta-ej >> nth=1 >> .tar-foto img >> nth=0', 'src')).endsWith('Barbell_Bench_Press_-_Medium_Grip/0.jpg'));
+      for (let i = 0; i < 20 && s.hojas.fotos.getLastRow() > 1; i++) await page.waitForTimeout(100);
+      assert.strictEqual(s.hojas.fotos.getLastRow(), 1, 'las fotos que ya no se usan se borran');
+    });
+    await prueba('cambiar el nombre de la rutina y borrarla', async () => {
+      await page.click('[aria-label="Editar rutina"]');
+      await page.fill('#f-rutina-renombrar', 'Pecho y hombro');
+      await page.click('dialog button:has-text("Guardar el nombre")');
+      await page.waitForSelector('.titulo:text-is("Pecho y hombro")');
+      const enc = s.hojas.rutinas.filas[0];
+      assert.ok(s.hojas.rutinas.filas.slice(1).every((f) => f[enc.indexOf('rutina')] === 'Pecho y hombro'));
+      await page.click('[aria-label="Editar rutina"]');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Borrar la rutina")');
+      await page.waitForSelector('text=Rutina borrada');
+      assert.strictEqual(s.hojas.rutinas.getLastRow(), 1);
+      assert.ok((await page.innerText('.app')).includes('Aún no tienes rutinas'));
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Servicio versión 3 (antes de las rutinas)');
+  {
+    const s = crearServicio({ codigo: path.join(__dirname, 'servicio-v3.gs.txt') });
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    s.post({ token: T, accion: 'agregar', tabla: 'comidas', fila: { fecha: hoy, tipo_comida: 'almuerzo', descripcion: 'Arroz con pollo', kcal: 700, proteina_g: 40, carbos_g: 80, grasa_g: 15 } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await prueba('todo sigue funcionando y avisa que actualizar trae las rutinas', async () => {
+      await page.waitForSelector('.plato .desc:has-text("Arroz con pollo")');
+      assert.ok((await page.innerText('.banda')).includes('rutinas con tus fotos'));
+    });
+    await prueba('Mis rutinas explica que hay que actualizar el servicio', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.btn-rutinas');
+      await page.waitForSelector('text=hay que actualizar tu servicio de Google (versión 4)');
+      assert.strictEqual(await page.locator('.nueva-rutina').count(), 0);
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

@@ -10,7 +10,7 @@
  * La contraseña NO está en este archivo ni en el repositorio.
  */
 
-var VERSION = 3;
+var VERSION = 4;
 
 var TABLAS = {
   comidas: [
@@ -78,13 +78,35 @@ var TABLAS = {
     { c: 'grasa_pierna_izq_kg', t: 'num', min: 0, max: 50 },
     { c: 'grasa_pierna_der_kg', t: 'num', min: 0, max: 50 }
   ],
+  // Mis rutinas: una fila por tarjeta (ejercicio) de cada rutina. Versión 4.
+  rutinas: [
+    { c: 'id', t: 'id' },
+    { c: 'rutina', t: 'texto', req: true },
+    { c: 'orden', t: 'num', min: 0, max: 1000 },
+    { c: 'ejercicio', t: 'texto', req: true },
+    { c: 'peso_kg', t: 'num', min: 0, max: 1000 },
+    { c: 'series', t: 'num', min: 1, max: 50, ent: true },
+    { c: 'repeticiones', t: 'num', min: 1, max: 1000, ent: true },
+    { c: 'principales', t: 'texto' },
+    { c: 'secundarios', t: 'texto' },
+    { c: 'nota', t: 'texto' },
+    { c: 'foto_a', t: 'texto' },
+    { c: 'foto_b', t: 'texto' },
+    { c: 'creado_en', t: 'ts' }
+  ],
+  // Fotos que subes para tus tarjetas, en pedazos (una celda guarda hasta 50.000 letras). Versión 4.
+  fotos: [
+    { c: 'id', t: 'texto' },
+    { c: 'parte', t: 'num' },
+    { c: 'datos', t: 'texto' }
+  ],
   metas: [
     { c: 'clave', t: 'texto', req: true },
     { c: 'valor', t: 'num', req: true }
   ]
 };
 
-var EDITABLES = { comidas: true, ejercicio: true, series_gym: true };
+var EDITABLES = { comidas: true, ejercicio: true, series_gym: true, rutinas: true };
 
 var METAS_INICIALES = [
   ['proteina_min_g', 130],
@@ -145,6 +167,10 @@ function doPost(e) {
       case 'agregar': return salida(conBloqueo(function () { return agregar(pedido.tabla, pedido.fila); }));
       case 'medidas': return salida(conBloqueo(function () { return guardarMedidas(pedido.fila); }));
       case 'borrar': return salida(conBloqueo(function () { return borrar(pedido.tabla, pedido.id); }));
+      case 'actualizar': return salida(conBloqueo(function () { return actualizar(pedido.tabla, pedido.id, pedido.fila); }));
+      case 'subirFoto': return salida(conBloqueo(function () { return subirFoto(pedido.imagen); }));
+      case 'fotos': return salida({ ok: true, fotos: leerFotos(pedido.ids) });
+      case 'borrarFoto': return salida(conBloqueo(function () { return borrarFoto(pedido.id); }));
       case 'chat': return salida(chat(pedido));
       default: return salida({ ok: false, error: 'Acción desconocida' });
     }
@@ -180,7 +206,14 @@ function conBloqueo(fn) {
 }
 
 function hoja(nombre) {
-  var h = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var h = ss.getSheetByName(nombre);
+  // Las pestañas nuevas (rutinas y fotos) se crean solas la primera vez
+  if (!h && (nombre === 'rutinas' || nombre === 'fotos')) {
+    h = ss.insertSheet(nombre);
+    asegurarEncabezados(h, nombre);
+    h.setFrozenRows(1);
+  }
   if (!h) throw new Error('Falta la pestaña "' + nombre + '". En Apps Script, ejecuta la función setup.');
   return h;
 }
@@ -353,7 +386,8 @@ function leerTodo(desde) {
     medidas: leer('medidas'),
     comidas: filtrar(leer('comidas')),
     ejercicio: filtrar(leer('ejercicio')),
-    series_gym: filtrar(leer('series_gym'))
+    series_gym: filtrar(leer('series_gym')),
+    rutinas: leer('rutinas')
   };
 }
 
@@ -394,6 +428,70 @@ function borrar(nombre, id) {
     if (String(valores[r][ci]).trim() === String(id).trim()) { h.deleteRow(r + 1); return { ok: true }; }
   }
   throw new Error('No se encontró el registro');
+}
+
+/** Cambia una tarjeta de una rutina sin cambiarle el id. */
+function actualizar(nombre, id, datos) {
+  if (nombre !== 'rutinas') throw new Error('Tabla no permitida');
+  var obj = validar(nombre, datos);
+  var h = hoja(nombre);
+  var enc = asegurarEncabezados(h, nombre);
+  var valores = h.getDataRange().getValues();
+  var ci = enc.indexOf('id');
+  for (var r = 1; r < valores.length; r++) {
+    if (String(valores[r][ci]).trim() === String(id).trim()) {
+      obj.id = String(valores[r][ci]).trim();
+      h.getRange(r + 1, 1, 1, enc.length).setValues([enc.map(function (c) { return obj[c] === null || obj[c] === undefined ? '' : obj[c]; })]);
+      return { ok: true, id: obj.id };
+    }
+  }
+  throw new Error('No se encontró el registro');
+}
+
+var PEDAZO_FOTO = 45000;
+/** Guarda una foto (ya achicada por la app) en pedazos. Cada pedazo empieza con «b:» para que Sheets no lo tome como fórmula. */
+function subirFoto(imagen) {
+  imagen = String(imagen || '');
+  if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(imagen)) throw new Error('La foto no es válida');
+  if (imagen.length > 600000) throw new Error('La foto es muy grande');
+  var id = Utilities.getUuid();
+  var filas = [];
+  for (var i = 0, n = 0; i < imagen.length; i += PEDAZO_FOTO, n++) filas.push([id, n, 'b:' + imagen.slice(i, i + PEDAZO_FOTO)]);
+  var h = hoja('fotos');
+  asegurarEncabezados(h, 'fotos');
+  var r = h.getLastRow() + 1;
+  h.getRange(r, 1, filas.length, 1).setNumberFormat('@');
+  h.getRange(r, 3, filas.length, 1).setNumberFormat('@');
+  h.getRange(r, 1, filas.length, 3).setValues(filas);
+  return { ok: true, id: id };
+}
+
+/** Las fotos pedidas, armadas otra vez: { id: 'data:image/…' }. */
+function leerFotos(ids) {
+  var quiero = {};
+  (ids || []).slice(0, 60).forEach(function (x) { quiero[String(x)] = true; });
+  var partes = {};
+  var valores = hoja('fotos').getDataRange().getValues();
+  for (var r = 1; r < valores.length; r++) {
+    var id = String(valores[r][0]).trim();
+    if (!quiero[id]) continue;
+    (partes[id] = partes[id] || []).push([Number(valores[r][1]) || 0, String(valores[r][2]).replace(/^b:/, '')]);
+  }
+  var out = {};
+  Object.keys(partes).forEach(function (id) {
+    out[id] = partes[id].sort(function (a, b) { return a[0] - b[0]; }).map(function (p) { return p[1]; }).join('');
+  });
+  return out;
+}
+
+function borrarFoto(id) {
+  var h = hoja('fotos');
+  var valores = h.getDataRange().getValues();
+  var n = 0;
+  for (var r = valores.length - 1; r >= 1; r--) {
+    if (String(valores[r][0]).trim() === String(id).trim()) { h.deleteRow(r + 1); n++; }
+  }
+  return { ok: true, borradas: n };
 }
 
 /** Resumen de un día (lo usa el chat con API y las versiones anteriores de la app). */

@@ -19,13 +19,13 @@ console.log('Instalación y contraseña');
   s.ctx.setup();
   s.ctx.setup();
 
-  prueba('setup crea las 5 pestañas con sus encabezados', () => {
-    assert.deepStrictEqual(Object.keys(s.hojas).sort(), ['comidas', 'ejercicio', 'medidas', 'metas', 'series_gym']);
+  prueba('setup crea las 7 pestañas con sus encabezados', () => {
+    assert.deepStrictEqual(Object.keys(s.hojas).sort(), ['comidas', 'ejercicio', 'fotos', 'medidas', 'metas', 'rutinas', 'series_gym']);
     assert.strictEqual(json(s.hojas.comidas.filas[0]), json(['id', 'fecha', 'hora', 'tipo_comida', 'descripcion', 'kcal', 'proteina_g', 'carbos_g', 'grasa_g', 'estimado', 'creado_en']));
   });
   prueba('setup se puede repetir sin duplicar las metas', () => assert.strictEqual(s.hojas.metas.getLastRow(), 6));
   prueba('la dirección del servicio responde con su versión', () => {
-    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 3);
+    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 4);
   });
   prueba('sin contraseña, con una incorrecta o con una corta: no autorizado', () => {
     assert.strictEqual(s.post({ accion: 'ping' }).error, 'No autorizado');
@@ -35,7 +35,7 @@ console.log('Instalación y contraseña');
   });
   prueba('ping devuelve la versión y si el chat con API está activo', () => {
     const r = s.post({ token: T, accion: 'ping' });
-    assert.ok(r.ok); assert.strictEqual(r.version, 3); assert.strictEqual(r.chat, false);
+    assert.ok(r.ok); assert.strictEqual(r.version, 4); assert.strictEqual(r.chat, false);
   });
   prueba('espacios sobrantes en la contraseña guardada o escrita no importan', () => {
     const e = crearServicio({ props: { TOKEN: '  clave-con-espacios-123  \n' } });
@@ -110,6 +110,60 @@ console.log('Guardar');
 }
 
 // ---------------------------------------------------------------------------
+console.log('Mis rutinas y fotos (versión 4)');
+{
+  const s = crearServicio();
+  const T = s.props.TOKEN;
+  s.ctx.setup();
+  delete s.hojas.rutinas; delete s.hojas.fotos; // como quien pegó la versión 4 sin ejecutar setup
+  const post = (o) => s.post(Object.assign({ token: T }, o));
+  // Una foto grande: más de un pedazo, y con «=» y «+» (Sheets no debe tomarla como fórmula)
+  const imagen = 'data:image/jpeg;base64,' + '+/=A'.repeat(25000);
+  let idFoto, idTarjeta;
+
+  prueba('leer funciona y crea solas las pestañas nuevas (sin ejecutar setup)', () => {
+    const r = post({ accion: 'leer' });
+    assert.ok(r.ok, json(r)); assert.deepStrictEqual(r.rutinas, []);
+    assert.ok(s.hojas.rutinas && s.hojas.rutinas.filas[0].includes('foto_a'));
+  });
+  prueba('subir una foto la guarda en pedazos y se lee igual', () => {
+    const r = post({ accion: 'subirFoto', imagen });
+    assert.ok(r.ok, json(r)); idFoto = r.id;
+    assert.strictEqual(s.hojas.fotos.getLastRow(), 4, 'encabezado + 3 pedazos');
+    assert.ok(s.hojas.fotos.filas.slice(1).every((f) => f[2].startsWith('b:')));
+    const l = post({ accion: 'fotos', ids: [idFoto, 'no-existe'] });
+    assert.strictEqual(l.fotos[idFoto], imagen); assert.ok(!('no-existe' in l.fotos));
+  });
+  prueba('rechaza lo que no es una foto', () => {
+    assert.ok(post({ accion: 'subirFoto', imagen: 'hola' }).error.includes('no es válida'));
+    assert.ok(post({ accion: 'subirFoto', imagen: 'data:image/jpeg;base64,' + 'A'.repeat(700000) }).error.includes('muy grande'));
+  });
+  prueba('guarda una tarjeta de rutina y viene al leer', () => {
+    const r = post({ accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Pecho - Hombro', orden: 1, ejercicio: 'Press banca plano', peso_kg: 40, series: 4, repeticiones: 12, principales: 'pecho', secundarios: 'triceps,hombros', foto_a: idFoto, foto_b: idFoto } });
+    assert.ok(r.ok, json(r)); idTarjeta = r.id;
+    const t = post({ accion: 'leer' }).rutinas[0];
+    assert.strictEqual(t.ejercicio, 'Press banca plano'); assert.strictEqual(t.peso_kg, 40); assert.strictEqual(t.foto_a, idFoto);
+  });
+  prueba('actualizar cambia la tarjeta sin cambiarle el id; solo en rutinas', () => {
+    const r = post({ accion: 'actualizar', tabla: 'rutinas', id: idTarjeta, fila: { rutina: 'Pecho - Hombro', orden: 2, ejercicio: 'Press banca plano', peso_kg: 42.5 } });
+    assert.ok(r.ok, json(r));
+    const l = post({ accion: 'leer' }).rutinas;
+    assert.strictEqual(l.length, 1); assert.strictEqual(l[0].id, idTarjeta); assert.strictEqual(l[0].peso_kg, 42.5); assert.strictEqual(l[0].foto_a, null);
+    assert.strictEqual(post({ accion: 'actualizar', tabla: 'comidas', id: 'x', fila: {} }).error, 'Tabla no permitida');
+    assert.ok(post({ accion: 'actualizar', tabla: 'rutinas', id: 'x', fila: { rutina: 'a', ejercicio: 'b' } }).error.includes('No se encontró'));
+  });
+  prueba('borrar la foto quita todos sus pedazos; borrar la tarjeta también funciona', () => {
+    assert.strictEqual(post({ accion: 'borrarFoto', id: idFoto }).borradas, 3);
+    assert.strictEqual(s.hojas.fotos.getLastRow(), 1);
+    assert.ok(post({ accion: 'borrar', tabla: 'rutinas', id: idTarjeta }).ok);
+    assert.deepStrictEqual(post({ accion: 'leer' }).rutinas, []);
+  });
+  prueba('las fotos no pueden escribirse con agregar', () => {
+    assert.strictEqual(post({ accion: 'agregar', tabla: 'fotos', fila: { id: 'x', datos: 'y' } }).error, 'Tabla no permitida');
+  });
+}
+
+// ---------------------------------------------------------------------------
 console.log('Leer datos que ya estaban en la hoja (lo que antes no aparecía)');
 {
   const s = crearServicio();
@@ -156,7 +210,7 @@ console.log('Leer datos que ya estaban en la hoja (lo que antes no aparecía)');
     s.ctx.probar();
     assert.strictEqual(json(s.hojas.comidas.filas), antes);
     assert.ok(s.estado.registros.some((l) => /comidas: 5 filas/.test(l)), s.estado.registros.join(' | '));
-    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 3/.test(l)));
+    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 4/.test(l)));
   });
 }
 
