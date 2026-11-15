@@ -310,12 +310,12 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.top [aria-label="Ajustes"]');
       await page.waitForSelector('dialog >> text=Mis metas');
       await captura(page, 'ajustes-simple');
-      assert.ok(!(await page.innerText('dialog')).includes('versión 4'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
+      assert.ok(!(await page.innerText('dialog')).includes('versión 5'), 'lo técnico no se ve hasta abrir «Opciones avanzadas»');
       await page.click('dialog summary:has-text("Opciones avanzadas")');
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('versión 4 (al día)') && t.includes('…'), t);
+      assert.ok(t.includes('versión 5 (al día)') && t.includes('…'), t);
       await page.click('dialog button:has-text("Copiar código del servicio")');
-      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 4'));
+      await page.waitForFunction(async () => (await navigator.clipboard.readText()).includes('var VERSION = 5'));
       await captura(page, 'ajustes');
     });
     await prueba('cambiar la dirección del servicio desde la app (sin tocar GitHub)', async () => {
@@ -597,24 +597,30 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
         assert.ok(src.endsWith(foto + '/0.jpg'), nombre + ' → ' + src);
       }
     });
-    await prueba('Ajustes → Ejercicios y fotos: elegir otra foto para un ejercicio', async () => {
-      await page.click('.top [aria-label="Ajustes"]');
-      await page.click('dialog button:has-text("Ejercicios y fotos")');
-      await page.click('dialog .item:has-text("Remo bajo")');
+    await prueba('Ejercicios: editar el ejercicio y elegir otra foto de la biblioteca (queda en tu hoja)', async () => {
+      await page.click('.seg.tres button:has-text("Ejercicios")');
+      await page.click('.bib-card:has(b:text-is("Remo bajo"))');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.click('dialog button:has-text("Elegir de la biblioteca")');
       await page.fill('#f-buscar-foto', 'crunch machine');
       await page.waitForSelector('dialog .foto-op');
       assert.strictEqual(await page.locator('dialog .foto-op').count(), 1, 'la búsqueda filtra');
       await page.click('dialog [aria-label="Usar la foto de Ab Crunch Machine"]');
-      await page.waitForSelector('text=Foto elegida para «Remo bajo»');
+      await page.click('dialog button:has-text("Guardar ejercicio")');
+      await page.waitForSelector('text=Ejercicio guardado');
+      const enc = s.hojas.ejercicios.filas[0], fila = s.hojas.ejercicios.filas[1];
+      assert.strictEqual(fila[enc.indexOf('nombre')], 'Remo bajo'); assert.strictEqual(fila[enc.indexOf('foto_a')], 'bd:Ab_Crunch_Machine');
+      await page.click('.seg.tres button:has-text("Semana")');
       const src = await page.locator('.ej:has(b:text-is("Remo bajo")) .foto-ej img').getAttribute('src');
       assert.ok(src.endsWith('Ab_Crunch_Machine/0.jpg'), 'la foto elegida se usa en Entreno: ' + src);
     });
-    await prueba('la foto elegida se puede quitar (vuelve la automática)', async () => {
-      await page.click('.top [aria-label="Ajustes"]');
-      await page.click('dialog button:has-text("Ejercicios y fotos")');
-      await page.click('dialog .item:has-text("Remo bajo")');
-      await page.click('dialog button:has-text("Quitar la foto que elegí")');
-      await page.waitForSelector('text=vuelve la foto automática');
+    await prueba('«Quitar mis cambios» vuelve a la foto de la biblioteca', async () => {
+      await page.click('[aria-label="Cómo se hace Remo bajo"]');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Quitar mis cambios")');
+      await page.waitForSelector('text=vuelve a la biblioteca');
+      assert.strictEqual(s.hojas.ejercicios.getLastRow(), 1);
       const src = await page.locator('.ej:has(b:text-is("Remo bajo")) .foto-ej img').getAttribute('src');
       assert.ok(src.endsWith('Seated_Cable_Rows/0.jpg'), src);
     });
@@ -622,54 +628,51 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('[aria-label="Cómo se hace Remo bajo"]');
       await page.waitForSelector('dialog .ficha');
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('Remo bajo (polea)') && t.includes('Cómo hacerlo') && t.includes('Espalda media'), t);
+      assert.ok(t.includes('Remo bajo') && t.includes('Cómo hacerlo') && t.includes('Espalda media') && t.includes('Editar ejercicio'), t);
       await page.keyboard.press('Escape');
     });
-    await prueba('biblioteca: se abre desde Entreno, con buscador y filtros por músculo y equipo', async () => {
-      await page.click('.btn-biblio');
-      await page.waitForSelector('.titulo:has-text("Ejercicios")');
-      assert.ok(await page.locator('.bib-card').count() >= 60, 'muchos ejercicios');
+    await prueba('Ejercicios: «Los míos», «Todos» con buscador y filtros por músculo y equipo', async () => {
+      await page.click('.seg.tres button:has-text("Ejercicios")');
+      await page.waitForSelector('.bib-card');
+      const mios = await page.locator('.bib-card').count();
+      assert.ok(mios >= 8 && mios < 20, 'solo los tuyos: ' + mios);
+      const jalon = await page.innerText('.bib-card:has(b:text-is("Jalón al frente"))');
+      assert.ok(jalon.includes('LO HACES') && jalon.includes('Último: 50 kg × 8'), jalon);
+      if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'biblio-mios.png') }); }
+      await page.click('.seg.dos button:has-text("Todos")');
+      assert.ok(await page.locator('.bib-card').count() >= 60, 'con la biblioteca completa');
       await page.fill('#f-buscar-ej', 'remo');
       await page.waitForFunction(() => [...document.querySelectorAll('.bib-card b')].every((b) => /remo/i.test(b.textContent)));
       const remos = await page.locator('.bib-card b').allInnerTexts();
-      assert.ok(remos.includes('Remo en máquina agarre neutro') && remos.includes('Remo bajo (polea)'), remos.join('|'));
+      assert.ok(remos.includes('Remo en máquina agarre neutro') && remos.includes('Remo bajo') && !remos.includes('Remo bajo (polea)'), 'tu «Remo bajo» reemplaza al de la biblioteca: ' + remos.join('|'));
       assert.strictEqual(await page.locator('#f-buscar-ej').evaluate((el) => el === document.activeElement), true, 'el buscador no pierde el foco');
       await page.fill('#f-buscar-ej', '');
       await page.click('[aria-label="Filtrar por músculo"] button:text-is("Pierna")');
       const pierna = await page.locator('.bib-card b').allInnerTexts();
-      assert.ok(pierna.includes('Sentadilla en máquina Hack') && !pierna.includes('Jalón al frente'), pierna.join('|'));
+      assert.ok(pierna.includes('Maquina Hack') && !pierna.includes('Jalón al frente'), pierna.join('|'));
       await page.click('[aria-label="Filtrar por músculo"] button:text-is("Espalda")');
       await page.click('[aria-label="Filtrar por equipo"] button:text-is("Polea")');
-      const tags = await page.locator('.bib-card .tag:not(.lo-haces)').allInnerTexts();
+      const tags = await page.locator('.bib-card .tag:not(.lo-haces):not(.aviso)').allInnerTexts();
       assert.ok(tags.length >= 4 && tags.every((x) => x === 'Polea'), 'solo polea: ' + tags.join('|'));
       await page.click('[aria-label="Filtrar por músculo"] button:text-is("Todos")');
       await page.click('[aria-label="Filtrar por equipo"] button:text-is("Todo")');
       if (CAPTURAS) { await page.waitForTimeout(3000); await page.screenshot({ path: path.join(CAPTURAS, 'biblioteca.png') }); }
+      await page.click('.seg.dos button:has-text("Los míos")');
     });
-    await prueba('biblioteca: «Solo los que hago» con el último peso', async () => {
-      await page.click('.pill-mios');
-      const jalon = page.locator('.bib-card:has(b:text-is("Jalón al frente"))');
-      const t = await jalon.innerText();
-      assert.ok(t.includes('LO HACES') && t.includes('Último: 50 kg × 8'), t);
-      const todos = await page.locator('.bib-card').count();
-      assert.ok(todos >= 8 && todos < 20, 'solo los registrados: ' + todos);
-      if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'biblio-mios.png') }); }
-    });
-    await prueba('ficha: fotos 1 y 2, músculos, cómo hacerlo, consejo y tus registros', async () => {
+    await prueba('ficha: fotos A y B, músculos, cómo hacerlo, consejo y tus registros', async () => {
       await page.click('.bib-card:has(b:text-is("Jalón al frente"))');
       await page.waitForSelector('dialog .ficha');
       assert.ok((await page.locator('dialog .ficha-foto img').nth(1).getAttribute('src')).endsWith('Wide-Grip_Lat_Pulldown/1.jpg'));
       assert.strictEqual(await page.locator('dialog .ficha svg').count(), 2, 'figura de frente y espalda');
       assert.ok(await page.locator('dialog .pasos li').count() >= 3);
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('Dorsales') && t.includes('💡') && t.includes('🏆 50 kg') && t.includes('2\nsesiones') && t.includes('«Jalón al frente»'), t);
+      assert.ok(t.includes('Dorsales') && t.includes('💡') && t.includes('🏆 50 kg') && t.includes('2\nsesiones'), t);
       if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'ficha.png') }); }
       await page.click('dialog button:has-text("Ver historial")');
       await page.waitForSelector('dialog >> text=2 sesiones');
       await page.keyboard.press('Escape');
-      await page.click('.pill-mios');
-      await page.click('[aria-label="Volver a Entreno"]');
-      await page.waitForSelector('.titulo:has-text("Entreno")');
+      await page.click('.seg.tres button:has-text("Semana")');
+      await page.waitForSelector('.hero-ent');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
@@ -742,7 +745,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
   }
 
   // =========================================================================
-  console.log('Mis rutinas: tarjetas con tus fotos');
+  console.log('Mis ejercicios y rutinas: el ejercicio se arma una vez, la rutina solo lo elige');
   {
     const s = crearServicio();
     s.ctx.setup();
@@ -753,34 +756,36 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await entrar(page, T);
     await page.waitForSelector('.hero');
     const RUT = 'Pecho - Hombro - Tríceps - Abdomen';
+    const col = (hoja, c) => s.hojas[hoja].filas[0].indexOf(c);
     const colorCentro = (sel) => page.locator(sel).evaluate((img) => new Promise((ok) => {
       const leer = () => { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const x = c.getContext('2d'); x.drawImage(img, 0, 0); ok([...x.getImageData(c.width >> 1, c.height >> 1, 1, 1).data].slice(0, 3)); };
       if (img.complete && img.naturalWidth) leer(); else img.onload = leer;
     }));
+    const esperarFotos = async (n) => { for (let i = 0; i < 30 && s.hojas.fotos.getLastRow() !== n; i++) await page.waitForTimeout(100); };
 
-    await prueba('Entreno → Mis rutinas → crear una rutina', async () => {
+    await prueba('Entreno en 3 pestañas → Rutinas → crear una rutina', async () => {
       await page.click('.nav [aria-label="Entreno"]');
-      await page.click('.btn-rutinas');
-      await page.waitForSelector('.titulo:text-is("Mis rutinas")');
+      assert.deepStrictEqual(await page.locator('.seg.tres button').allInnerTexts(), ['Semana', 'Rutinas', 'Ejercicios']);
+      await page.click('.seg.tres button:has-text("Rutinas")');
       assert.ok((await page.innerText('.app')).includes('Aún no tienes rutinas'));
       await page.click('.nueva-rutina');
       await page.fill('#f-rutina-nombre', RUT);
-      await page.click('dialog button:has-text("Crear y agregar")');
-      await page.waitForSelector('#f-tar-nombre');
+      await page.click('dialog button:has-text("Crear y elegir")');
+      await page.waitForSelector('#f-buscar-rutina');
       assert.strictEqual(await page.innerText('.titulo'), RUT);
+      assert.ok((await page.innerText('dialog .elegir-lista')).includes('Press banca plano'), 'tus ejercicios registrados aparecen para elegir');
     });
-    await prueba('el nombre llena solo los músculos y el último peso registrado', async () => {
-      await page.fill('#f-tar-nombre', 'Press banca plano');
+    await prueba('crear un ejercicio desde la rutina: el nombre llena los músculos', async () => {
+      await page.click('dialog button:has-text("Crear ejercicio")');
+      await page.fill('#f-ej-nombre', 'Press banca plano');
       assert.ok((await page.innerText('dialog .sug')).includes('Está en la biblioteca'));
-      assert.strictEqual(await page.inputValue('#f-tar-peso'), '40');
-      assert.strictEqual(await page.inputValue('#f-tar-series'), '3');
       assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Pecho"]', 'aria-label'), 'Pecho (principal)');
       assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Tríceps"]', 'aria-label'), 'Tríceps (también)');
       await page.click('.chips-musc [aria-label^="Abdomen"]');
       await page.click('.chips-musc [aria-label^="Abdomen"]');
       assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Abdomen"]', 'aria-label'), 'Abdomen (también)', 'toca 2 veces = también');
       await page.click('.chips-musc [aria-label^="Abdomen"]');
-      await page.fill('#f-tar-reps', '12');
+      assert.strictEqual(await page.getAttribute('[aria-label="Equipo"] button.p', 'aria-pressed'), 'true');
     });
     await prueba('subir una imagen con A y B juntas la parte en dos (A izquierda, B derecha)', async () => {
       await page.setInputFiles('input[aria-label="📷 Subir A y B juntas"]', path.join(__dirname, 'foto-ab.png'));
@@ -788,39 +793,50 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const [a, b] = [await colorCentro('dialog .slot.lleno img >> nth=0'), await colorCentro('dialog .slot.lleno img >> nth=1')];
       assert.ok(a[0] > 150 && a[2] < 100, 'A es la mitad roja: ' + a);
       assert.ok(b[2] > 150 && b[0] < 100, 'B es la mitad azul: ' + b);
-      if (CAPTURAS) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(CAPTURAS, 'tarjeta-editor.png') }); }
+      if (CAPTURAS) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(CAPTURAS, 'ejercicio-editor.png') }); }
     });
-    await prueba('guardar: la tarjeta y sus fotos quedan en tu hoja de Google', async () => {
-      await page.click('dialog button:has-text("Guardar tarjeta")');
-      await page.waitForSelector('text=Ejercicio agregado');
-      const enc = s.hojas.rutinas.filas[0], fila = s.hojas.rutinas.filas[1];
-      assert.strictEqual(fila[enc.indexOf('ejercicio')], 'Press banca plano');
-      assert.strictEqual(fila[enc.indexOf('peso_kg')], 40); assert.strictEqual(fila[enc.indexOf('repeticiones')], 12);
-      assert.strictEqual(fila[enc.indexOf('principales')], '', 'los músculos sugeridos no se guardan: se toman de la biblioteca');
-      assert.ok(fila[enc.indexOf('foto_a')] && fila[enc.indexOf('foto_b')] && fila[enc.indexOf('foto_a')] !== fila[enc.indexOf('foto_b')]);
+    await prueba('guardar el ejercicio vuelve a la rutina con él elegido y el último peso', async () => {
+      await page.click('dialog button:has-text("Guardar ejercicio")');
+      await page.waitForSelector('#f-buscar-rutina');
+      const f = s.hojas.ejercicios.filas[1];
+      assert.strictEqual(f[col('ejercicios', 'nombre')], 'Press banca plano');
+      assert.ok(f[col('ejercicios', 'foto_a')] && f[col('ejercicios', 'foto_b')] && f[col('ejercicios', 'foto_a')] !== f[col('ejercicios', 'foto_b')]);
+      assert.strictEqual(f[col('ejercicios', 'principales')], '', 'los músculos sugeridos no se guardan: se toman de la biblioteca');
       assert.ok(s.hojas.fotos.getLastRow() >= 3, 'dos fotos guardadas');
+      assert.strictEqual(await page.getAttribute('dialog .elegir-op.sel', 'aria-label'), 'Press banca plano');
+      assert.strictEqual(await page.inputValue('#f-tar-peso'), '40');
+      assert.strictEqual(await page.inputValue('#f-tar-series'), '3');
+    });
+    await prueba('agregar a la rutina: solo peso, series y repeticiones', async () => {
+      await page.fill('#f-tar-reps', '12');
+      await page.click('dialog button:has-text("Agregar «Press banca plano»")');
+      await page.waitForSelector('text=Ejercicio agregado');
+      const f = s.hojas.rutinas.filas[1];
+      assert.strictEqual(f[col('rutinas', 'ejercicio')], 'Press banca plano');
+      assert.strictEqual(f[col('rutinas', 'peso_kg')], 40); assert.strictEqual(f[col('rutinas', 'repeticiones')], 12);
+      assert.strictEqual(f[col('rutinas', 'foto_a')], '', 'la tarjeta no guarda fotos: las toma del ejercicio');
       const t = await page.innerText('.tarjeta-ej');
-      assert.ok(t.includes('Press banca plano') && t.includes('40 kg') && t.includes('3 × 12') && t.includes('último registro: 40 kg × 10') && t.includes('Trabaja') && t.includes('Pecho'), t);
+      assert.ok(t.includes('Press banca plano') && t.includes('40 kg') && t.includes('3 × 12') && t.includes('último: 40 kg × 10') && t.includes('Trabaja') && t.includes('Pecho'), t);
       assert.ok((await page.getAttribute('.tarjeta-ej .tar-foto img >> nth=1', 'src')).startsWith('data:image/jpeg'));
     });
-    await prueba('una tarjeta sin fotos propias usa las de la biblioteca', async () => {
+    await prueba('elegir un ejercicio de la biblioteca buscándolo', async () => {
       await page.click('.agregar-ej');
-      await page.fill('#f-tar-nombre', 'Press de pecho inclinado articulado');
+      await page.fill('#f-buscar-rutina', 'inclinado');
+      await page.click('dialog .elegir-op[aria-label="Press inclinado en máquina"]');
       await page.fill('#f-tar-peso', '25');
-      await page.click('dialog button:has-text("Guardar tarjeta")');
+      await page.click('dialog button:has-text("Agregar «Press inclinado en máquina»")');
       await page.waitForFunction(() => document.querySelectorAll('.tarjeta-ej').length === 2);
       const card = page.locator('.tarjeta-ej >> nth=1');
       assert.ok((await card.locator('.tar-foto img >> nth=0').getAttribute('src')).endsWith('Leverage_Incline_Chest_Press/0.jpg'));
       const t = await card.innerText();
-      assert.ok(t.includes('25 kg') && t.includes('Pecho') && t.includes('Cómo se hace'), t);
+      assert.ok(t.includes('25 kg') && t.includes('Pecho') && t.includes('Ejercicio') && t.includes('Peso y series'), t);
       if (CAPTURAS) { await page.waitForTimeout(2000); await page.screenshot({ path: path.join(CAPTURAS, 'rutina.png'), fullPage: true }); }
     });
     await prueba('ordenar con las flechas', async () => {
-      await page.click('[aria-label="Subir Press de pecho inclinado articulado"]');
-      await page.waitForFunction(() => document.querySelector('.tarjeta-ej b').textContent === 'Press de pecho inclinado articulado');
-      const enc = s.hojas.rutinas.filas[0];
-      const orden = Object.fromEntries(s.hojas.rutinas.filas.slice(1).map((f) => [f[enc.indexOf('ejercicio')], f[enc.indexOf('orden')]]));
-      assert.ok(orden['Press de pecho inclinado articulado'] < orden['Press banca plano'], JSON.stringify(orden));
+      await page.click('[aria-label="Subir Press inclinado en máquina"]');
+      await page.waitForFunction(() => document.querySelector('.tarjeta-ej b').textContent === 'Press inclinado en máquina');
+      const orden = Object.fromEntries(s.hojas.rutinas.filas.slice(1).map((f) => [f[col('rutinas', 'ejercicio')], f[col('rutinas', 'orden')]]));
+      assert.ok(orden['Press inclinado en máquina'] < orden['Press banca plano'], JSON.stringify(orden));
     });
     await prueba('tocar tu foto la abre en grande con A y B', async () => {
       await page.click('[aria-label="Ver en grande la foto A de Press banca plano"]');
@@ -834,56 +850,110 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.reload();
       await page.waitForSelector('.hero');
       await page.click('.nav [aria-label="Entreno"]');
-      await page.click('.btn-rutinas');
+      await page.click('.seg.tres button:has-text("Rutinas")');
       const card = page.locator('.rut-card');
       assert.ok((await card.innerText()).includes('2 ejercicios'));
-      assert.ok((await page.getAttribute('.rut-card img', 'src')).endsWith('Leverage_Incline_Chest_Press/0.jpg'), 'la miniatura es la del primer ejercicio');
       if (CAPTURAS) { await page.waitForTimeout(1500); await page.screenshot({ path: path.join(CAPTURAS, 'mis-rutinas.png') }); }
       await card.click();
       await page.waitForFunction(() => [...document.querySelectorAll('.tar-foto img')].filter((i) => i.src.startsWith('data:image/jpeg')).length === 2);
     });
-    await prueba('editar: cambiar el peso y volver a las fotos de la biblioteca borra las tuyas', async () => {
-      await page.click('[aria-label="Editar Press banca plano"]');
+    await prueba('«Peso y series» cambia solo eso', async () => {
+      await page.click('[aria-label="Peso y series de Press banca plano"]');
       await page.fill('#f-tar-peso', '42.5');
-      await page.click('dialog button:has-text("Usar la de la biblioteca")');
-      await page.click('dialog button:has-text("Guardar tarjeta")');
-      await page.waitForSelector('text=Tarjeta guardada');
+      await page.click('dialog button:text-is("Guardar")');
       await page.waitForFunction(() => document.body.innerText.includes('42,5 kg'));
+      assert.strictEqual(s.hojas.rutinas.filas.find((f) => f[col('rutinas', 'ejercicio')] === 'Press banca plano')[col('rutinas', 'peso_kg')], 42.5);
+    });
+    await prueba('editar el ejercicio (volver a la foto automática) cambia la rutina y borra tus fotos', async () => {
+      await page.click('[aria-label="Ver el ejercicio Press banca plano"]');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.click('dialog button:has-text("Automática")');
+      await page.click('dialog button:has-text("Guardar ejercicio")');
+      await page.waitForSelector('text=Ejercicio guardado');
       assert.ok((await page.getAttribute('.tarjeta-ej >> nth=1 >> .tar-foto img >> nth=0', 'src')).endsWith('Barbell_Bench_Press_-_Medium_Grip/0.jpg'));
-      for (let i = 0; i < 20 && s.hojas.fotos.getLastRow() > 1; i++) await page.waitForTimeout(100);
+      await esperarFotos(1);
       assert.strictEqual(s.hojas.fotos.getLastRow(), 1, 'las fotos que ya no se usan se borran');
     });
-    await prueba('cambiar el nombre de la rutina y borrarla', async () => {
+    await prueba('cambiar el nombre del ejercicio lo corrige en la rutina y en tu historial', async () => {
+      await page.click('[aria-label="Ver el ejercicio Press banca plano"]');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.fill('#f-ej-nombre', 'Press de banca plano');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Guardar ejercicio")');
+      await page.waitForSelector('.tarjeta-ej b:text-is("Press de banca plano")');
+      const series = s.hojas.series_gym.filas.slice(1).map((f) => f[col('series_gym', 'ejercicio')]);
+      assert.ok(series.length === 3 && series.every((n) => n === 'Press de banca plano'), series.join('|'));
+      assert.ok((await page.innerText('.tarjeta-ej >> nth=1')).includes('último: 40 kg × 10'), 'el historial sigue unido al ejercicio');
+    });
+    await prueba('cambiar el nombre de la rutina y borrarla (los ejercicios quedan)', async () => {
       await page.click('[aria-label="Editar rutina"]');
       await page.fill('#f-rutina-renombrar', 'Pecho y hombro');
       await page.click('dialog button:has-text("Guardar el nombre")');
       await page.waitForSelector('.titulo:text-is("Pecho y hombro")');
-      const enc = s.hojas.rutinas.filas[0];
-      assert.ok(s.hojas.rutinas.filas.slice(1).every((f) => f[enc.indexOf('rutina')] === 'Pecho y hombro'));
+      assert.ok(s.hojas.rutinas.filas.slice(1).every((f) => f[col('rutinas', 'rutina')] === 'Pecho y hombro'));
       await page.click('[aria-label="Editar rutina"]');
       page.once('dialog', (d) => d.accept());
       await page.click('dialog button:has-text("Borrar la rutina")');
       await page.waitForSelector('text=Rutina borrada');
       assert.strictEqual(s.hojas.rutinas.getLastRow(), 1);
+      assert.strictEqual(s.hojas.ejercicios.getLastRow(), 2, 'el ejercicio no se borra');
       assert.ok((await page.innerText('.app')).includes('Aún no tienes rutinas'));
     });
-    await prueba('«Abdominales cruzados en banco declinado» trabaja abdomen (aunque se haya guardado Pecho / Tríceps por el error anterior)', async () => {
+    await prueba('las tarjetas de la versión anterior (con fotos y músculos) pasan solas a «Mis ejercicios»', async () => {
+      const foto = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'foto-ab.png')).toString('base64');
+      const idFoto = s.post({ token: T, accion: 'subirFoto', imagen: foto }).id;
       s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Abdomen', orden: 1, ejercicio: 'Abdominales cruzados en banco declinado', principales: 'pecho', secundarios: 'triceps' } });
+      s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Abdomen', orden: 2, ejercicio: 'Crunch abdominal en máquina', foto_a: idFoto, principales: 'abdomen,pecho' } });
       await page.reload();
       await page.waitForSelector('.hero');
+      for (let i = 0; i < 40 && s.hojas.rutinas.filas.slice(1).some((f) => f[col('rutinas', 'principales')]); i++) await page.waitForTimeout(100);
+      const tarjetas = s.hojas.rutinas.filas.slice(1);
+      assert.ok(tarjetas.every((f) => !f[col('rutinas', 'principales')] && !f[col('rutinas', 'foto_a')]), 'las tarjetas quedan solo con peso y series');
+      const ej = Object.fromEntries(s.hojas.ejercicios.filas.slice(1).map((f) => [f[col('ejercicios', 'nombre')], f]));
+      assert.strictEqual(ej['Crunch abdominal en máquina'][col('ejercicios', 'foto_a')], idFoto, 'la foto pasa al ejercicio');
+      assert.strictEqual(ej['Crunch abdominal en máquina'][col('ejercicios', 'principales')], 'abdomen,pecho');
+      assert.strictEqual(ej['Abdominales cruzados en banco declinado'][col('ejercicios', 'principales')], '', 'el «pecho» del error anterior no pasa');
+      assert.strictEqual(s.hojas.fotos.getLastRow(), 2, 'la foto no se borra: la usa el ejercicio');
       await page.click('.nav [aria-label="Entreno"]');
-      await page.click('.btn-rutinas');
+      await page.click('.seg.tres button:has-text("Rutinas")');
       await page.click('.rut-card');
-      const t = await page.innerText('.tar-trab');
+      const t = await page.innerText('.tarjeta-ej >> nth=0');
       assert.ok(t.includes('Abdomen') && !t.includes('Pecho') && !t.includes('Tríceps'), t);
-      assert.ok((await page.getAttribute('.tar-foto img', 'src')).endsWith('Decline_Oblique_Crunch/0.jpg'));
-      await page.click('.tarjeta-ej button:has-text("Cómo se hace")');
+      assert.ok((await page.getAttribute('.tarjeta-ej >> nth=0 >> .tar-foto img', 'src')).endsWith('Decline_Oblique_Crunch/0.jpg'));
+      await page.click('[aria-label="Ver el ejercicio Abdominales cruzados en banco declinado"]');
       await page.waitForSelector('dialog .ficha');
       assert.ok((await page.innerText('dialog')).includes('Oblicuos'));
-      await page.keyboard.press('Escape');
-      await page.click('[aria-label="Editar Abdominales cruzados en banco declinado"]');
+      await page.click('dialog button:has-text("Editar ejercicio")');
       assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Abdomen"]', 'aria-label'), 'Abdomen (principal)');
       assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Pecho"]', 'aria-label'), 'Pecho');
+      await page.keyboard.press('Escape');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
+  console.log('Servicio versión 4 (antes de «Mis ejercicios»)');
+  {
+    const s = crearServicio({ codigo: path.join(__dirname, 'servicio-v4.gs.txt') });
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    s.post({ token: T, accion: 'agregar', tabla: 'series_gym', fila: { fecha: hoy, rutina: 'Pecho', ejercicio: 'Press banca', numero_serie: 1, peso_kg: 40, repeticiones: 10 } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await prueba('avisa que actualizar trae «Mis ejercicios»; las rutinas siguen funcionando', async () => {
+      await page.waitForSelector('.banda');
+      assert.ok((await page.innerText('.banda')).includes('ejercicios con sus fotos'));
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg.tres button:has-text("Rutinas")');
+      await page.waitForSelector('.nueva-rutina');
+    });
+    await prueba('editar un ejercicio explica que hay que actualizar el servicio', async () => {
+      await page.click('.seg.tres button:has-text("Ejercicios")');
+      await page.click('.bib-card:has(b:text-is("Press banca"))');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.waitForSelector('dialog >> text=versión 5');
       await page.keyboard.press('Escape');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
@@ -904,10 +974,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.plato .desc:has-text("Arroz con pollo")');
       assert.ok((await page.innerText('.banda')).includes('rutinas con tus fotos'));
     });
-    await prueba('Mis rutinas explica que hay que actualizar el servicio', async () => {
+    await prueba('Rutinas explica que hay que actualizar el servicio', async () => {
       await page.click('.nav [aria-label="Entreno"]');
-      await page.click('.btn-rutinas');
-      await page.waitForSelector('text=hay que actualizar tu servicio de Google (versión 4)');
+      await page.click('.seg.tres button:has-text("Rutinas")');
+      await page.waitForSelector('text=hay que actualizar tu servicio de Google');
       assert.strictEqual(await page.locator('.nueva-rutina').count(), 0);
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));

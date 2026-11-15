@@ -2,7 +2,7 @@
   "use strict";
 
   var VERSION_APP = 2;
-  var SERVICIO_REQUERIDO = 4; // versión de apps-script/Code.gs que espera esta app (3: medición trimestral completa; 4: mis rutinas con fotos)
+  var SERVICIO_REQUERIDO = 5; // versión de apps-script/Code.gs que espera esta app (3: medición trimestral; 4: rutinas; 5: mis ejercicios)
   var DIAS_CARGADOS = 100;    // la app trae de una vez los últimos 100 días: cambiar de día y ver Progreso (hasta 90) es instantáneo
   var DIAS_MEDICION = 90;     // peso y cintura se miden cada 3 meses
   // Medición trimestral: [campo, nombre, unidad, decimales, grupo, qué es mejor ("sube", "baja" o null), mín, máx]
@@ -274,7 +274,8 @@
       ejercicio: (r.ejercicio || []).map(filaNormal),
       series_gym: (r.series_gym || []).map(filaNormal),
       medidas: (r.medidas || []).map(filaNormal),
-      rutinas: Array.isArray(r.rutinas) ? r.rutinas.map(filaNormal) : null // null: servicio anterior a la versión 4
+      rutinas: Array.isArray(r.rutinas) ? r.rutinas.map(filaNormal) : null, // null: servicio anterior a la versión 4
+      ejercicios: Array.isArray(r.ejercicios) ? r.ejercicios.map(filaNormal) : null // null: servicio anterior a la versión 5
     };
     estado.metas = r.metas || {};
     estado.chat = !!r.chat;
@@ -321,6 +322,7 @@
       raiz.classList.remove("cargando", "actualizando");
       pintar();
       guardarCache();
+      migrarEjercicios().then(function (hubo) { if (hubo && !hojaActual) pintar(); });
     }).catch(function (e) {
       raiz.classList.remove("cargando", "actualizando");
       if (opc.silencioso && estado.tablas && !(e && e.noAutorizado)) aviso("Sin conexión con Google: ves lo último guardado.", true);
@@ -429,8 +431,6 @@
     if (estado.pantalla === "progreso") return pintarProgreso();
     if (estado.pantalla === "cuerpo") return pintarCuerpo();
     if (estado.pantalla === "entreno") return pintarEntreno();
-    if (estado.pantalla === "ejercicios") return pintarBiblioteca();
-    if (estado.pantalla === "rutinas") return pintarRutinas();
     if (estado.pantalla === "rutina") return pintarRutina();
     return pintarHoy();
   }
@@ -440,7 +440,8 @@
       raiz.appendChild(h("div", { class: "banda" },
         h("b", { text: "Actualiza tu servicio de Google" }),
         h("span", { text: estado.version < 3 ? "Tiene una versión anterior: para guardar tu medición completa (grasa, músculo, cinta métrica) y tus rutinas con fotos hay que actualizarlo. Toma 2 minutos."
-          : "Tiene una versión anterior: para guardar tus rutinas con tus fotos hay que actualizarlo. Toma 2 minutos." }),
+          : estado.version < 4 ? "Tiene una versión anterior: para guardar tus rutinas con tus fotos hay que actualizarlo. Toma 2 minutos."
+          : "Tiene una versión anterior: para guardar tus ejercicios con sus fotos (y elegirlos en tus rutinas) hay que actualizarlo. Toma 2 minutos." }),
         h("button", { class: "btn lima", text: "Ver cómo", onclick: abrirAjustes })));
     }
     var rep = bandaRepetidos();
@@ -525,7 +526,7 @@
         h("div", { class: "valor" }, sueno === null ? "—" : fmt(sueno, 1), " ", h("small", { text: "h" })),
         h("div", { class: "nota", text: sueno === null ? "Toca para registrar" : "Meta 8 h" + (sueno < 8 ? " · faltó " + fmt(8 - sueno, 1) + " h" : " ✓") })),
       h("button", { type: "button", class: "card tocable", "aria-label": d.ejercicio.length || grupos.length ? "Ver entreno" : "Registrar ejercicio",
-        onclick: function () { if (d.ejercicio.length || grupos.length) { estado.pantalla = "entreno"; estado.semanaEntreno = Math.round((lunesDe(estado.fecha) - lunesDe(hoy)) / 604800000); estado.diaEntreno = estado.fecha; pintar(); window.scrollTo(0, 0); } else abrirAgregar("ejercicio"); } },
+        onclick: function () { if (d.ejercicio.length || grupos.length) { estado.pantalla = "entreno"; estado.tabEntreno = "semana"; estado.semanaEntreno = Math.round((lunesDe(estado.fecha) - lunesDe(hoy)) / 604800000); estado.diaEntreno = estado.fecha; pintar(); window.scrollTo(0, 0); } else abrirAgregar("ejercicio"); } },
         h("div", { class: "cab" }, h("span", { class: "chip-ico", style: "background:#FFF1E2", text: "🏋️" }), h("span", { text: "Entreno" }), h("span", { class: "mas", "aria-hidden": "true", text: "+" })),
         h("div", { class: "valor valor-t", text: entrenoTxt }),
         h("div", { class: "nota", text: entrenoSub }))));
@@ -945,14 +946,6 @@
     }
     return null;
   }
-  function infoEjercicio(nombre) {
-    var t = sinTildes(nombre);
-    var propia = leerPersonal()[t.trim()];
-    if (propia && propia.foto) return { foto: propia.foto, principales: propia.principales || [], secundarios: propia.secundarios || [], ref: fichaDe(nombre) };
-    for (var i = 0; i < CATALOGO_EJ.length; i++) if (CATALOGO_EJ[i][0].test(t)) return { foto: CATALOGO_EJ[i][1], principales: CATALOGO_EJ[i][2], secundarios: CATALOGO_EJ[i][3], ref: fichaDe(nombre) };
-    var g = PALABRAS_GRUPO.filter(function (p) { return p[0].test(t); }).map(function (p) { return p[1]; });
-    return { foto: null, principales: g.filter(function (x, k) { return g.indexOf(x) === k; }), secundarios: [] };
-  }
   function nombresGrupos(l) { return l.map(function (g) { return GRUPOS[g]; }).join(" · "); }
 
   /** Visor grande: la foto del ejercicio a pantalla casi completa, con las dos posiciones (1 y 2). */
@@ -986,6 +979,14 @@
   /** Foto del ejercicio: al tocarla se abre en grande, con las dos posiciones. Sin foto: un icono. */
   function fotoEjercicio(info, titulo) {
     var caja = h("button", { type: "button", class: "foto-ej", "aria-label": "Ver en grande la foto de " + (titulo || "el ejercicio") });
+    if (info.propias) {
+      caja.appendChild(imgSubida(info.propias[0], "")); caja.appendChild(h("span", { class: "foto-n", text: "🔍 A · B" }));
+      caja.addEventListener("click", function (e) {
+        e.stopPropagation();
+        traerFotos(info.propias).then(function (m) { abrirVisorFoto({ srcs: info.propias.map(function (x) { return m[x]; }).filter(Boolean) }, titulo || "Ejercicio", 0); }, manejarError);
+      });
+      return caja;
+    }
     if (!info.foto) { caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; return caja; }
     var img = h("img", { src: FOTOS_EJ + info.foto + "/0.jpg", alt: "", loading: "lazy" });
     img.addEventListener("error", function () { caja.textContent = ""; caja.appendChild(h("span", { class: "foto-emo", text: "🏋️" })); caja.disabled = true; });
@@ -1089,7 +1090,7 @@
       h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Serie" }), h("th", { text: "Peso" }), h("th", { text: "Reps" }), h("th", { class: "v", text: "vs anterior" }))), h("tbody", {}, filas)),
       h("div", { class: "tot" }, h("span", { text: "Volumen " + fmt(vol) + " kg" }),
         difVol === null ? null : h("span", { class: "badge " + (difVol >= 0 ? "up" : "dn"), text: (difVol >= 0 ? "▲ " : "▼ ") + Math.abs(difVol) + " % vs el " + corta(previa.fecha) }),
-        info.ref ? h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", "aria-label": "Cómo se hace " + g.ejercicio, onclick: function () { abrirFicha(info.ref); } }) : null,
+        h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", "aria-label": "Cómo se hace " + g.ejercicio, onclick: function () { abrirEjercicio(g.ejercicio); } }),
         h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleGym(g); } })));
   }
 
@@ -1099,15 +1100,18 @@
     raiz.textContent = "";
     bandas();
     encabezado("Tu entrenamiento", "Entreno");
-    var nRutinas = hayRutinas() ? rutinasAgrupadas().length : 0;
-    raiz.appendChild(h("button", { type: "button", class: "btn-rutinas", onclick: function () { estado.pantalla = "rutinas"; pintar(); window.scrollTo(0, 0); } },
-      h("span", { class: "emo", "aria-hidden": "true", text: "📋" }),
-      h("span", { class: "t" }, h("b", { text: "Mis rutinas" }), h("small", { text: nRutinas ? plural(nRutinas, "rutina", "rutinas") + " con tus tarjetas y fotos" : "Arma tus rutinas con tus fotos" })),
-      icono("sig", 18)));
-    raiz.appendChild(h("button", { type: "button", class: "btn-biblio", onclick: function () { estado.pantalla = "ejercicios"; pintar(); window.scrollTo(0, 0); } },
-      h("span", { class: "emo", "aria-hidden": "true", text: "📚" }),
-      h("span", { class: "t" }, h("b", { text: "Biblioteca de ejercicios" }), h("small", { text: BIBLIOTECA.filter(function (e) { return !e.oculto; }).length + " ejercicios con foto, músculos y cómo hacerlos" })),
-      icono("sig", 18)));
+    var tab = estado.tabEntreno || "semana";
+    raiz.appendChild(h("div", { class: "seg tres", role: "tablist", "aria-label": "Secciones de Entreno" }, [["semana", "Semana"], ["rutinas", "Rutinas"], ["ejercicios", "Ejercicios"]].map(function (x) {
+      return h("button", { type: "button", role: "tab", class: "pill" + (tab === x[0] ? " on" : ""), "aria-selected": tab === x[0] ? "true" : "false", text: x[1],
+        onclick: function () { estado.tabEntreno = x[0]; pintar(); window.scrollTo(0, 0); } });
+    })));
+    if (tab !== "semana") {
+      if (!estado.tablas) raiz.appendChild(h("div", { class: "vacio", text: "Para esto, la app necesita la versión nueva del servicio de Google." }));
+      else if (tab === "rutinas") pintarTabRutinas();
+      else pintarTabEjercicios();
+      raiz.appendChild(navegacion("entreno"));
+      return;
+    }
     if (!estado.tablas) { raiz.appendChild(h("div", { class: "vacio", text: "Para ver tu entreno, la app necesita la versión nueva del servicio de Google." })); raiz.appendChild(navegacion("entreno")); return; }
     var T = estado.tablas, hist = historialEjercicios();
     var lunes = sumarDias(iso(lunesDe(hoy)), 7 * (estado.semanaEntreno || 0)), dias = [];
@@ -1220,167 +1224,439 @@
     raiz.appendChild(navegacion("entreno"));
   }
 
-  // ---------- Biblioteca de ejercicios ----------
+  // ---------- Mis ejercicios ----------
+  // Un ejercicio se arma una sola vez (fotos, músculos, equipo, cómo hacerlo) en la pestaña «ejercicios» de tu hoja.
+  // Lo que no cambies sale de la biblioteca (ejercicios.js). La rutina solo dice qué ejercicio va y con qué peso.
   var FILTROS_MUSCULO = [["", "Todos"], ["pecho", "Pecho", ["pecho"]], ["espalda", "Espalda", ["espalda"]], ["hombros", "Hombros", ["hombros"]], ["biceps", "Bíceps", ["biceps", "antebrazo"]],
     ["triceps", "Tríceps", ["triceps"]], ["pierna", "Pierna", ["cuadriceps", "femorales", "aductores", "pantorrillas"]], ["gluteos", "Glúteos", ["gluteos"]], ["abdomen", "Abdomen", ["abdomen"]]];
   var FILTROS_EQUIPO = [["", "Todo"], ["maquina", "Máquina"], ["polea", "Polea"], ["mancuernas", "Mancuernas"], ["barra", "Barra"], ["smith", "Smith"], ["peso corporal", "Peso corporal"]];
   var NOMBRE_EQUIPO = { maquina: "Máquina", polea: "Polea", mancuernas: "Mancuernas", barra: "Barra", smith: "Smith", "peso corporal": "Peso corporal" };
-  function seccionDe(e) {
-    for (var i = 1; i < FILTROS_MUSCULO.length; i++) if (FILTROS_MUSCULO[i][2].indexOf(e.p[0]) >= 0) return FILTROS_MUSCULO[i];
-    return FILTROS_MUSCULO[1];
-  }
-  /** Lo que has hecho de cada ficha: los nombres con que lo registras y sus sesiones (de la más vieja a la más nueva). */
-  function registrosPorFicha() {
-    var hist = historialEjercicios(), porFicha = [], sinFicha = [];
-    Object.keys(hist).forEach(function (k) {
-      var e = hist[k], f = fichaDe(e.nombre);
-      if (!f) { sinFicha.push(e); return; }
-      var i = BIBLIOTECA.indexOf(f);
-      var r = porFicha[i] = porFicha[i] || { nombres: [], ej: [], sesiones: [] };
-      r.nombres.push(e.nombre); r.ej.push(e);
-      e.sesiones.forEach(function (x) { r.sesiones.push(x); });
-    });
-    porFicha.forEach(function (r) { if (r) r.sesiones.sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; }); });
-    return { porFicha: porFicha, sinFicha: sinFicha };
+  function seccionDe(p) {
+    for (var i = 1; i < FILTROS_MUSCULO.length; i++) if (FILTROS_MUSCULO[i][2].indexOf(p[0]) >= 0) return FILTROS_MUSCULO[i];
+    return ["otros", "Otros"];
   }
   function mejorSerie(x) {
     return x.series.filter(function (s) { return (Number(s.peso_kg) || 0) === x.max; }).sort(function (a, b) { return (Number(b.repeticiones) || 0) - (Number(a.repeticiones) || 0); })[0] || x.series[0];
   }
   function textoSerie(s) { return Number(s.peso_kg) ? fmt(s.peso_kg, 1) + " kg × " + fmt(s.repeticiones) : fmt(s.repeticiones) + " reps"; }
-  function fotoBiblio(e, clase) {
+  function hayEjercicios() { return !!(estado.tablas && Array.isArray(estado.tablas.ejercicios)); }
+  function claveEj(n) { return sinTildes(n).trim(); }
+  function filaEjercicio(nombre) {
+    if (!hayEjercicios()) return null;
+    var k = claveEj(nombre);
+    return estado.tablas.ejercicios.filter(function (e) { return claveEj(e.nombre) === k; })[0] || null;
+  }
+
+  /** Todo lo que se sabe de un ejercicio: lo tuyo primero y, lo que falte, de la biblioteca. */
+  function datosEjercicio(nombre, fichaForzada) {
+    var k = claveEj(nombre), fila = filaEjercicio(nombre), ficha = fichaForzada || fichaDe(nombre);
+    var d = { nombre: fila ? fila.nombre : nombre, fila: fila, ficha: ficha, propias: null, foto: null };
+    // Fotos: las tuyas → (de versiones anteriores: una tarjeta de rutina con fotos, o la foto elegida en este celular) → biblioteca
+    var tarjeta = hayRutinas() ? estado.tablas.rutinas.filter(function (t) { return claveEj(t.ejercicio) === k && (t.foto_a || t.foto_b); })[0] : null;
+    var personal = leerPersonal()[k];
+    if (fila && /^bd:/.test(fila.foto_a || "")) d.foto = fila.foto_a.slice(3);
+    else if (fila && (fila.foto_a || fila.foto_b)) d.propias = [fila.foto_a, fila.foto_b].filter(Boolean);
+    else if (tarjeta) d.propias = [tarjeta.foto_a, tarjeta.foto_b].filter(Boolean);
+    else if (personal && personal.foto) d.foto = personal.foto;
+    else if (ficha) d.foto = ficha.f;
+    // Músculos
+    var elegidosTarjeta = hayRutinas() ? estado.tablas.rutinas.map(musculosElegidos).filter(function (m, i) { return m && claveEj(estado.tablas.rutinas[i].ejercicio) === k; })[0] : null;
+    if (fila && (fila.principales || fila.secundarios)) { d.p = listaGrupos(fila.principales); d.s = listaGrupos(fila.secundarios); d.musculosPropios = true; }
+    else if (elegidosTarjeta) { d.p = elegidosTarjeta.p; d.s = elegidosTarjeta.s; d.musculosPropios = true; }
+    else if (personal && personal.foto && (personal.principales || []).length) { d.p = personal.principales; d.s = personal.secundarios || []; d.musculosPropios = true; }
+    else if (ficha) { d.p = ficha.p.slice(); d.s = ficha.s.slice(); }
+    else {
+      var t = sinTildes(nombre), g = PALABRAS_GRUPO.filter(function (p) { return p[0].test(t); }).map(function (p) { return p[1]; });
+      d.p = g.filter(function (x, i) { return g.indexOf(x) === i; }); d.s = [];
+    }
+    d.s = d.s.filter(function (g) { return d.p.indexOf(g) < 0; });
+    d.equipo = (fila && fila.equipo) || (ficha ? ficha.eq : null);
+    d.nivel = ficha ? ficha.niv : null;
+    var propios = fila && fila.pasos ? String(fila.pasos).split(/\n+/).map(function (x) { return x.replace(/^\s*\d+[.)-]?\s*/, "").trim(); }).filter(Boolean) : null;
+    d.pasos = propios || (ficha ? ficha.pasos : []);
+    d.pasosPropios = !!propios;
+    d.tip = propios ? null : ficha ? ficha.tip : null;
+    d.nota = fila && fila.nota ? fila.nota : null;
+    d.textoP = d.musculosPropios || !ficha ? nombresGrupos(d.p) : ficha.t;
+    d.textoS = d.musculosPropios || !ficha ? nombresGrupos(d.s) : ficha.tb;
+    return d;
+  }
+  function infoEjercicio(nombre) {
+    var d = datosEjercicio(nombre);
+    return { foto: d.foto, propias: d.propias, principales: d.p, secundarios: d.s, ref: d.ficha };
+  }
+  /** Tus ejercicios: los que tienes guardados, los que has registrado y los que están en una rutina. */
+  function misEjercicios() {
+    var m = {};
+    var poner = function (n) { var k = claveEj(n); if (!k) return null; return (m[k] = m[k] || { nombre: String(n).trim(), series: 0, rutinas: {} }); };
+    if (estado.tablas) estado.tablas.series_gym.forEach(function (s) { var e = poner(s.ejercicio); if (e) e.series++; });
+    if (hayRutinas()) estado.tablas.rutinas.forEach(function (t) { var e = poner(t.ejercicio); if (e) e.rutinas[claveEj(t.rutina)] = true; });
+    if (hayEjercicios()) estado.tablas.ejercicios.forEach(function (f) { var e = poner(f.nombre); if (e) { e.nombre = String(f.nombre).trim(); e.fila = f; } });
+    return Object.keys(m).map(function (k) { var e = m[k]; e.nRutinas = Object.keys(e.rutinas).length; return e; })
+      .sort(function (a, b) { return a.nombre.localeCompare(b.nombre, "es"); });
+  }
+  function ultimoRegistro(nombre) {
+    var e = historialEjercicios()[sinTildes(String(nombre).trim())];
+    return e && e.sesiones.length ? e.sesiones[e.sesiones.length - 1] : null;
+  }
+
+  /** Miniatura (posición A) de un ejercicio. */
+  function miniEjercicio(info, clase) {
     var caja = h("span", { class: clase });
-    var img = h("img", { src: FOTOS_EJ + e.f + "/0.jpg", alt: "", loading: "lazy" });
-    img.addEventListener("error", function () { caja.textContent = "🏋️"; });
-    caja.appendChild(img);
+    if (info.propias) caja.appendChild(imgSubida(info.propias[0], ""));
+    else if (info.foto) {
+      var img = h("img", { src: FOTOS_EJ + info.foto + "/0.jpg", alt: "", loading: "lazy" });
+      img.addEventListener("error", function () { caja.textContent = "🏋️"; });
+      caja.appendChild(img);
+    } else caja.textContent = "🏋️";
+    return caja;
+  }
+  /** Fotos A y B de un ejercicio (tuyas o de la biblioteca); al tocarlas se ven en grande. */
+  function fotosAB(info, titulo, claseCaja, claseFoto) {
+    var caja = h("div", { class: claseCaja });
+    if (info.propias) {
+      if (info.propias.length === 1) caja.classList.add("una");
+      info.propias.forEach(function (id, k) {
+        caja.appendChild(h("button", { type: "button", class: claseFoto + " propia", "aria-label": "Ver en grande la foto " + (k ? "B" : "A") + " de " + titulo, onclick: function () {
+          traerFotos(info.propias).then(function (m) { abrirVisorFoto({ srcs: info.propias.map(function (x) { return m[x]; }).filter(Boolean) }, titulo, k); }, manejarError);
+        } }, imgSubida(id, ""), h("span", { class: "ab", text: info.propias.length === 1 ? "A · B" : k ? "B · final" : "A · inicio" })));
+      });
+    } else if (info.foto) {
+      [0, 1].forEach(function (k) {
+        var b = h("button", { type: "button", class: claseFoto + " biblio", "aria-label": "Ver en grande la foto " + (k ? "B" : "A") + " de " + titulo, onclick: function () { abrirVisorFoto(info, titulo, k); } });
+        var img = h("img", { src: FOTOS_EJ + info.foto + "/" + k + ".jpg", alt: "", loading: "lazy" });
+        img.addEventListener("error", function () { b.textContent = "🏋️"; b.disabled = true; });
+        b.appendChild(img); b.appendChild(h("span", { class: "ab", text: k ? "B · final" : "A · inicio" }));
+        caja.appendChild(b);
+      });
+    } else return null;
     return caja;
   }
 
-  function pintarBiblioteca() {
-    raiz.textContent = "";
-    bandas();
-    var f = estado.biblio = estado.biblio || { q: "", musculo: "", equipo: "", mios: false };
-    raiz.appendChild(h("div", { class: "top" },
-      h("button", { class: "icono-btn", "aria-label": "Volver a Entreno", onclick: function () { estado.pantalla = "entreno"; pintar(); window.scrollTo(0, 0); } }, icono("atras", 20)),
-      h("div", { class: "top-centro" }, h("div", { class: "sub", text: "Entreno" }), h("div", { class: "titulo", text: "Ejercicios" })),
-      botonAjustes()));
-    var reg = estado.tablas ? registrosPorFicha() : { porFicha: [], sinFicha: [] };
+  /** Pestaña «Ejercicios» de Entreno: buscar, filtrar, abrir y crear. */
+  function pintarTabEjercicios() {
+    var f = estado.biblio = estado.biblio || { q: "", musculo: "", equipo: "", todos: false };
     var buscar = h("input", { id: "f-buscar-ej", type: "search", value: f.q, placeholder: "Busca: remo, polea, glúteo, jalón…", "aria-label": "Buscar ejercicio", autocomplete: "off" });
+    var alcance = h("div", { class: "seg dos", role: "group", "aria-label": "Qué ejercicios ver" });
     var chipsM = h("div", { class: "chips chips-scroll", role: "group", "aria-label": "Filtrar por músculo" });
     var chipsE = h("div", { class: "chips chips-scroll", role: "group", "aria-label": "Filtrar por equipo" });
-    var mios = h("button", { type: "button", class: "pill-mios" });
     var cuenta = h("div", { class: "nota", "aria-live": "polite" });
     var lista = h("div", { class: "biblio" });
+    var mios = misEjercicios(), hist = historialEjercicios();
     function chips() {
-      chipsM.textContent = ""; chipsE.textContent = "";
+      alcance.textContent = ""; chipsM.textContent = ""; chipsE.textContent = "";
+      [[false, "⭐ Los míos"], [true, "📚 Todos"]].forEach(function (a) {
+        alcance.appendChild(h("button", { type: "button", class: "pill" + (f.todos === a[0] ? " on" : ""), "aria-pressed": f.todos === a[0] ? "true" : "false", text: a[1], onclick: function () { f.todos = a[0]; chips(); mostrar(); } }));
+      });
       FILTROS_MUSCULO.forEach(function (m) {
         chipsM.appendChild(h("button", { type: "button", class: f.musculo === m[0] ? "on" : "", "aria-pressed": f.musculo === m[0] ? "true" : "false", text: m[1], onclick: function () { f.musculo = m[0]; chips(); mostrar(); } }));
       });
       FILTROS_EQUIPO.forEach(function (q) {
         chipsE.appendChild(h("button", { type: "button", class: f.equipo === q[0] ? "on" : "", "aria-pressed": f.equipo === q[0] ? "true" : "false", text: q[1], onclick: function () { f.equipo = q[0]; chips(); mostrar(); } }));
       });
-      mios.className = "pill-mios" + (f.mios ? " on" : "");
-      mios.setAttribute("aria-pressed", f.mios ? "true" : "false");
-      mios.textContent = "⭐ Solo los que hago";
     }
-    mios.addEventListener("click", function () { f.mios = !f.mios; chips(); mostrar(); });
     function mostrar() {
       lista.textContent = "";
       var palabras = sinTildes(f.q).split(/[^a-z0-9ñ]+/).filter(Boolean);
       var musc = FILTROS_MUSCULO.filter(function (m) { return m[0] === f.musculo; })[0];
-      var hallados = BIBLIOTECA.map(function (e, i) { return { e: e, r: reg.porFicha[i] }; }).filter(function (x) {
-        var e = x.e;
-        if (e.oculto) return false;
-        if (f.mios && !x.r) return false;
-        if (f.equipo && e.eq !== f.equipo) return false;
-        if (musc && musc[2] && !e.p.some(function (g) { return musc[2].indexOf(g) >= 0; })) return false;
-        var texto = sinTildes([e.n, e.t, e.tb, NOMBRE_EQUIPO[e.eq], e.p.concat(e.s).map(function (g) { return GRUPOS[g]; }).join(" "), x.r ? x.r.nombres.join(" ") : "", e.re.source.replace(/[^a-z ]+/g, " ")].join(" "));
+      // Elementos: tus ejercicios y, con «Todos», los de la biblioteca que aún no son tuyos
+      var items = mios.map(function (e) { return { mio: e, d: datosEjercicio(e.nombre) }; });
+      if (f.todos) {
+        var usadas = items.map(function (x) { return x.d.ficha; });
+        BIBLIOTECA.forEach(function (fi) { if (!fi.oculto && usadas.indexOf(fi) < 0) items.push({ d: datosEjercicio(fi.n, fi) }); });
+      }
+      var hallados = items.filter(function (x) {
+        var d = x.d;
+        if (f.equipo && d.equipo !== f.equipo) return false;
+        if (musc && musc[2] && !d.p.some(function (g) { return musc[2].indexOf(g) >= 0; })) return false;
+        var texto = sinTildes([d.nombre, d.textoP, d.textoS, NOMBRE_EQUIPO[d.equipo] || "", nombresGrupos(d.p.concat(d.s)), d.ficha ? d.ficha.n + " " + d.ficha.re.source.replace(/[^a-z ]+/g, " ") : ""].join(" "));
         return palabras.every(function (w) { return texto.indexOf(w) >= 0; });
       });
-      // Los que haces van primero dentro de cada grupo
-      var secciones = {};
-      hallados.forEach(function (x) { var sc = seccionDe(x.e); (secciones[sc[0]] = secciones[sc[0]] || { nombre: sc[1], items: [] }).items.push(x); });
-      FILTROS_MUSCULO.slice(1).forEach(function (m) {
-        var sc = secciones[m[0]];
+      var secciones = {}, orden = FILTROS_MUSCULO.slice(1).map(function (m) { return m[0]; }).concat(["otros"]);
+      hallados.forEach(function (x) { var sc = seccionDe(x.d.p); (secciones[sc[0]] = secciones[sc[0]] || { nombre: sc[1], items: [] }).items.push(x); });
+      orden.forEach(function (k) {
+        var sc = secciones[k];
         if (!sc) return;
-        sc.items.sort(function (a, b) { return (b.r ? 1 : 0) - (a.r ? 1 : 0) || (a.e.n < b.e.n ? -1 : 1); });
+        sc.items.sort(function (a, b) { return (b.mio ? 1 : 0) - (a.mio ? 1 : 0) || a.d.nombre.localeCompare(b.d.nombre, "es"); });
         lista.appendChild(h("div", { class: "grupo-t", text: sc.nombre + " · " + sc.items.length }));
         lista.appendChild(h("div", { class: "bib-lista" }, sc.items.map(function (x) {
-          var e = x.e, ult = x.r ? x.r.sesiones[x.r.sesiones.length - 1] : null;
-          return h("button", { type: "button", class: "bib-card", "aria-label": e.n + (x.r ? " (lo haces)" : ""), onclick: function () { abrirFicha(e); } },
-            fotoBiblio(e, "bib-foto"),
+          var d = x.d, e = hist[claveEj(d.nombre)], ult = e && e.sesiones.length ? e.sesiones[e.sesiones.length - 1] : null;
+          var info = { foto: d.foto, propias: d.propias };
+          var tagFoto = d.propias ? h("span", { class: "tag", text: "📷 Foto tuya" }) : d.foto ? null : h("span", { class: "tag aviso", text: "⚠ Sin foto" });
+          return h("button", { type: "button", class: "bib-card", "aria-label": d.nombre + (x.mio ? " (tuyo)" : ""), onclick: function () { abrirEjercicio(d.nombre, x.mio ? null : d.ficha); } },
+            miniEjercicio(info, "bib-foto"),
             h("span", { class: "bib-t" },
-              h("b", { text: e.n }),
-              h("span", { class: "ej-m", text: nombresGrupos(e.p) + (e.s.length ? " · " + nombresGrupos(e.s) : "") }),
-              h("span", { class: "bib-tags" }, h("span", { class: "tag", text: NOMBRE_EQUIPO[e.eq] || e.eq }), x.r ? h("span", { class: "tag lo-haces", text: "LO HACES" }) : null),
+              h("b", { text: d.nombre }),
+              h("span", { class: "ej-m", text: nombresGrupos(d.p) + (d.s.length ? " · " + nombresGrupos(d.s) : "") || "Sin músculos" }),
+              h("span", { class: "bib-tags" }, d.equipo ? h("span", { class: "tag", text: NOMBRE_EQUIPO[d.equipo] || d.equipo }) : null,
+                x.mio && x.mio.nRutinas ? h("span", { class: "tag lo-haces", text: x.mio.nRutinas === 1 ? "EN 1 RUTINA" : "EN " + x.mio.nRutinas + " RUTINAS" }) : null,
+                x.mio && !x.mio.nRutinas && x.mio.series ? h("span", { class: "tag lo-haces", text: "LO HACES" }) : null, tagFoto),
               ult ? h("span", { class: "nota", text: "Último: " + textoSerie(mejorSerie(ult)) + " · " + corta(ult.fecha) }) : null));
         })));
       });
-      // Ejercicios registrados que aún no tienen ficha
-      var sin = f.mios || palabras.length ? reg.sinFicha.filter(function (e) { return palabras.every(function (w) { return sinTildes(e.nombre).indexOf(w) >= 0; }); }) : [];
-      if (sin.length && !f.equipo && !f.musculo) {
-        lista.appendChild(h("div", { class: "grupo-t", text: "Registrados sin ficha · " + sin.length }));
-        lista.appendChild(h("div", { class: "lista" }, sin.map(function (e) {
-          return h("button", { class: "item con-emo", onclick: function () { abrirEditorEjercicio(e.nombre); } }, h("span", { class: "emo mini-foto", text: "🏋️" }),
-            h("div", { class: "t" }, h("b", { text: e.nombre }), h("span", { text: "Sin ficha todavía · toca para elegirle foto o corregir el nombre" })));
-        })));
-      }
-      cuenta.textContent = hallados.length ? plural(hallados.length, "ejercicio", "ejercicios") : "";
-      if (!hallados.length && !sin.length) lista.appendChild(h("div", { class: "vacio", text: f.mios ? "Con estos filtros no hay ejercicios que hayas registrado." : "No encontré ejercicios. Prueba con otra palabra o quita un filtro." }));
+      cuenta.textContent = plural(hallados.length, "ejercicio", "ejercicios");
+      if (!hallados.length) lista.appendChild(h("div", { class: "vacio", text: !f.todos && !mios.length ? "Aún no tienes ejercicios. Toca «📚 Todos» para ver la biblioteca o crea uno." : "No encontré ejercicios. Prueba con otra palabra, quita un filtro o mira en «📚 Todos»." }));
     }
     buscar.addEventListener("input", function () { f.q = buscar.value; mostrar(); });
     chips();
-    raiz.appendChild(h("div", { class: "graf bib-filtros" }, buscar, chipsM, chipsE, h("div", { class: "bib-fila" }, mios, cuenta)));
+    raiz.appendChild(h("div", { class: "graf bib-filtros" }, buscar, alcance, chipsM, chipsE, h("div", { class: "bib-fila" }, cuenta)));
     raiz.appendChild(lista);
+    raiz.appendChild(h("button", { type: "button", class: "nueva-rutina crear-ej", text: "＋ Crear ejercicio", onclick: function () { abrirEditarEjercicio(null); } }));
     mostrar();
-    raiz.appendChild(navegacion("entreno"));
   }
 
-  /** Ficha de un ejercicio: fotos (posición 1 y 2), músculos en la figura, cómo hacerlo y tus registros. */
-  function abrirFicha(e) {
-    var info = { foto: e.f, principales: e.p, secundarios: e.s };
-    var i = BIBLIOTECA.indexOf(e), r = estado.tablas ? registrosPorFicha().porFicha[i] : null;
+  /** Ficha de un ejercicio: fotos (A y B), músculos, cómo hacerlo, tu nota, tus registros y «Editar ejercicio». */
+  function abrirEjercicio(nombre, fichaForzada) {
+    var d = datosEjercicio(nombre, fichaForzada);
+    var info = { foto: d.foto, propias: d.propias, principales: d.p, secundarios: d.s };
+    var mio = misEjercicios().filter(function (e) { return claveEj(e.nombre) === claveEj(d.nombre); })[0];
+    var e = historialEjercicios()[claveEj(d.nombre)];
     var nivel = {};
-    e.s.forEach(function (g) { nivel[g] = 2; });
-    e.p.forEach(function (g) { nivel[g] = 12; });
-    var fotos = h("div", { class: "ficha-fotos" }, [0, 1].map(function (k) {
-      var b = h("button", { type: "button", class: "ficha-foto", "aria-label": "Ver en grande la posición " + (k + 1) + " de " + e.n, onclick: function () { abrirVisorFoto(info, e.n, k); } });
-      var img = h("img", { src: FOTOS_EJ + e.f + "/" + k + ".jpg", alt: "", loading: "lazy" });
-      img.addEventListener("error", function () { b.textContent = "🏋️"; b.disabled = true; });
-      b.appendChild(img); b.appendChild(h("span", { class: "foto-n", text: (k + 1) + (k === 0 ? " · inicio" : " · final") }));
-      return b;
-    }));
+    d.s.forEach(function (g) { nivel[g] = 2; });
+    d.p.forEach(function (g) { nivel[g] = 12; });
     var tuyos;
-    if (r) {
-      var ult = r.sesiones[r.sesiones.length - 1];
-      var mejor = r.sesiones.reduce(function (a, x) { return !a || x.max > a.max ? x : a; }, null);
-      var fechas = {}; r.sesiones.forEach(function (x) { fechas[x.fecha] = true; });
+    if (e && e.sesiones.length) {
+      var ult = e.sesiones[e.sesiones.length - 1];
+      var mejor = e.sesiones.reduce(function (a, x) { return !a || x.max > a.max ? x : a; }, null);
       tuyos = h("div", { class: "graf" }, h("h3", { text: "Tus registros" }),
-        h("div", { class: "d", text: "En tus registros se llama: " + r.nombres.map(function (n) { return "«" + n + "»"; }).join(", ") }),
         h("div", { class: "kp-ficha" },
           h("div", {}, h("b", { text: textoSerie(mejorSerie(ult)) }), h("small", { text: "Último · " + corta(ult.fecha) })),
           h("div", {}, h("b", { text: "🏆 " + (mejor.max ? fmt(mejor.max, 1) + " kg" : textoSerie(mejorSerie(mejor))) }), h("small", { text: "Mejor · " + corta(mejor.fecha) })),
-          h("div", {}, h("b", { text: String(Object.keys(fechas).length) }), h("small", { text: Object.keys(fechas).length === 1 ? "sesión" : "sesiones" }))),
-        r.ej.map(function (x) {
-          return h("button", { type: "button", class: "btn sec", text: "Ver historial" + (r.ej.length > 1 ? " de «" + x.nombre + "»" : ""), onclick: function () { abrirHistorialEjercicio(x); } });
-        }));
+          h("div", {}, h("b", { text: String(e.sesiones.length) }), h("small", { text: e.sesiones.length === 1 ? "sesión" : "sesiones" }))),
+        h("button", { type: "button", class: "btn sec", text: "Ver historial", onclick: function () { abrirHistorialEjercicio(e); } }));
     } else {
       tuyos = h("div", { class: "graf" }, h("h3", { text: "Tus registros" }),
-        h("p", { class: "ayuda", text: "Aún no lo has registrado. Cuando lo hagas, dile a Claude el nombre tal como sale en Smart Fit y aquí verás tu último peso, tu récord y el historial." }));
+        h("p", { class: "ayuda", text: "Aún no lo has registrado. Cuando lo hagas, dile a Claude el nombre tal como está aquí y verás tu último peso, tu récord y el historial." }));
     }
-    abrirHoja(e.n, h("div", { class: "ficha" },
-      fotos,
-      h("div", { class: "chips-m" }, h("span", { text: "🏋️ " + (NOMBRE_EQUIPO[e.eq] || e.eq) }), h("span", { text: e.niv === "intermedio" ? "📈 Intermedio" : "🌱 Principiante" }), r ? h("span", { class: "lo-haces", text: "⭐ Lo haces" }) : null),
+    abrirHoja(d.nombre, h("div", { class: "ficha" },
+      h("button", { type: "button", class: "btn lima editar-ej", text: "✎ Editar ejercicio", onclick: function () { abrirEditarEjercicio(d.nombre, null, fichaForzada); } }),
+      fotosAB(info, d.nombre, "ficha-fotos", "ficha-foto") || h("p", { class: "ayuda", text: "Sin fotos. Toca «Editar ejercicio» para subir las tuyas." }),
+      h("div", { class: "chips-m" }, d.equipo ? h("span", { text: "🏋️ " + (NOMBRE_EQUIPO[d.equipo] || d.equipo) }) : null,
+        d.nivel ? h("span", { text: d.nivel === "intermedio" ? "📈 Intermedio" : "🌱 Principiante" }) : null,
+        mio && mio.nRutinas ? h("span", { class: "lo-haces", text: "⭐ En " + plural(mio.nRutinas, "rutina", "rutinas") }) : mio && mio.series ? h("span", { class: "lo-haces", text: "⭐ Lo haces" }) : null),
       h("div", { class: "graf" }, h("h3", { text: "Qué trabaja" }),
         h("div", { class: "ficha-musc" },
           h("div", { class: "cuerpo-fig" }, figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
           h("div", { class: "ficha-txt" },
-            h("div", {}, h("small", { text: "Principal" }), h("b", { text: e.t })),
-            e.tb ? h("div", {}, h("small", { text: "También" }), h("b", { text: e.tb })) : null)),
+            h("div", {}, h("small", { text: "Principal" }), h("b", { text: d.textoP || "—" })),
+            d.textoS ? h("div", {}, h("small", { text: "También" }), h("b", { text: d.textoS })) : null)),
         leyenda([["#0E6B47", "Principal"], ["#B8E68F", "También"]])),
-      e.pasos.length ? h("div", { class: "graf" }, h("h3", { text: "Cómo hacerlo" }),
-        h("ol", { class: "pasos" }, e.pasos.map(function (p) { return h("li", { text: p }); })),
-        e.tip ? h("div", { class: "tip" }, h("span", { "aria-hidden": "true", text: "💡" }), h("span", { text: e.tip })) : null) : null,
+      d.pasos.length ? h("div", { class: "graf" }, h("h3", { text: "Cómo hacerlo" }),
+        h("ol", { class: "pasos" }, d.pasos.map(function (p) { return h("li", { text: p }); })),
+        d.tip ? h("div", { class: "tip" }, h("span", { "aria-hidden": "true", text: "💡" }), h("span", { text: d.tip })) : null) : null,
+      d.nota ? h("div", { class: "graf" }, h("h3", { text: "Tu nota" }), h("p", { class: "ficha-nota", text: d.nota })) : null,
       tuyos));
+  }
+  /** Compatibilidad: abrir la ficha desde una ficha de la biblioteca. */
+  function abrirFicha(fi) { abrirEjercicio(fi.n, fi); }
+
+  /** Crear o editar un ejercicio (una sola vez): nombre, fotos A y B, músculos, equipo, cómo hacerlo y nota. */
+  function abrirEditarEjercicio(nombre, alGuardar, fichaForzada) {
+    if (!hayEjercicios()) {
+      abrirHoja("Editar ejercicio", avisoServicio("Para guardar tus ejercicios con sus fotos hay que actualizar tu servicio de Google (versión 5). Toma 2 minutos."));
+      return;
+    }
+    var d = nombre ? datosEjercicio(nombre, fichaForzada) : null, fila = d ? d.fila : null;
+    var nombreViejo = d ? d.nombre : null;
+    var campo = h("input", { id: "f-ej-nombre", type: "text", maxlength: 80, value: d ? d.nombre : "", list: "lista-biblio", autocomplete: "off", "aria-label": "Nombre del ejercicio" });
+    var opciones = h("datalist", { id: "lista-biblio" }, BIBLIOTECA.filter(function (x) { return !x.oculto; }).map(function (x) { return h("option", { value: x.n }); }));
+    var sugerencia = h("div", { class: "sug", "aria-live": "polite" });
+    // Fotos: modo «auto» (biblioteca), «bd» (una de las ~800 fotos de la biblioteca) o «propias» (subidas por ti)
+    var fotos = { modo: "auto", a: null, b: null, bd: null };
+    if (d && d.propias) { fotos.modo = "propias"; fotos.a = d.propias[0] ? { id: d.propias[0] } : null; fotos.b = d.propias[1] ? { id: d.propias[1] } : null; }
+    else if (fila && /^bd:/.test(fila.foto_a || "")) { fotos.modo = "bd"; fotos.bd = fila.foto_a.slice(3); }
+    else if (d && d.foto && (!d.ficha || d.foto !== d.ficha.f)) { fotos.modo = "bd"; fotos.bd = d.foto; }
+    var ranuras = h("div", { class: "subir" }), notaFotos = h("p", { class: "ayuda" });
+    var musc = {}, tocoMusculos = !!(d && d.musculosPropios);
+    if (d) { d.s.forEach(function (g) { musc[g] = 1; }); d.p.forEach(function (g) { musc[g] = 2; }); }
+    var chipsMusc = h("div", { class: "chips chips-musc", role: "group", "aria-label": "Músculos que trabaja" });
+    var equipo = fila && fila.equipo ? fila.equipo : d && d.equipo ? d.equipo : "";
+    var tocoEquipo = !!(fila && fila.equipo);
+    var chipsEq = h("div", { class: "chips chips-musc", role: "group", "aria-label": "Equipo" });
+    var pasos = h("textarea", { id: "f-ej-pasos", rows: 4, maxlength: 3000, "aria-label": "Cómo hacerlo", placeholder: "Un paso por línea. Si lo dejas vacío, se usa el de la biblioteca." });
+    if (fila && fila.pasos) pasos.value = fila.pasos;
+    var nota = h("input", { id: "f-ej-nota", type: "text", maxlength: 300, value: fila && fila.nota ? fila.nota : "", placeholder: "Por ejemplo: asiento en el 4", "aria-label": "Nota" });
+
+    function fichaActual() { return fichaForzada && claveEj(campo.value) === claveEj(fichaForzada.n) ? fichaForzada : fichaDe(campo.value); }
+    function pintarRanuras() {
+      ranuras.textContent = "";
+      var fi = fichaActual();
+      ["a", "b"].forEach(function (lado, k) {
+        var f = fotos[lado], caja = h("div", { class: "slot" });
+        if (fotos.modo === "propias" && f) { caja.classList.add("lleno"); caja.appendChild(f.datos ? h("img", { src: f.datos, alt: "Foto " + lado.toUpperCase() }) : imgSubida(f.id, "Foto " + lado.toUpperCase())); }
+        else if (fotos.modo === "bd" && fotos.bd) { caja.classList.add("biblio"); caja.appendChild(h("img", { src: FOTOS_EJ + fotos.bd + "/" + k + ".jpg", alt: "Foto " + lado.toUpperCase() })); }
+        else if (fotos.modo === "auto" && fi) { caja.classList.add("biblio"); caja.appendChild(h("img", { src: FOTOS_EJ + fi.f + "/" + k + ".jpg", alt: "Foto de la biblioteca " + lado.toUpperCase() })); }
+        else caja.appendChild(h("span", { text: "Sin foto " + lado.toUpperCase() }));
+        caja.appendChild(h("span", { class: "ab", text: lado.toUpperCase() }));
+        ranuras.appendChild(caja);
+      });
+      notaFotos.textContent = fotos.modo === "propias" ? "Fotos tuyas." : fotos.modo === "bd" ? "Foto elegida de la biblioteca." : fi ? "Fotos automáticas de la biblioteca. Sube las tuyas si quieres otras." : "Sin fotos: sube las tuyas o elige una de la biblioteca.";
+    }
+    function selector(etiqueta, partes, destino) {
+      var input = h("input", { type: "file", accept: "image/*", class: "oculto-archivo", "aria-label": etiqueta });
+      input.addEventListener("change", function () {
+        var f = input.files && input.files[0]; if (!f) return;
+        prepararImagen(f, partes).then(function (res) {
+          if (fotos.modo !== "propias") { fotos.a = null; fotos.b = null; }
+          fotos.modo = "propias";
+          if (partes === 2) { fotos.a = { datos: res[0] }; fotos.b = { datos: res[1] }; } else fotos[destino] = { datos: res[0] };
+          input.value = ""; pintarRanuras();
+        }, function (e) { input.value = ""; aviso(e.message, true); });
+      });
+      return h("label", { class: "chip-subir" }, input, etiqueta);
+    }
+    var buscadorBD = elegirFotoBD(function (x) { fotos.modo = "bd"; fotos.bd = x.id; fotos.a = null; fotos.b = null; pintarRanuras(); buscadorBD.hidden = true; aviso("Foto elegida: " + x.name); });
+    buscadorBD.hidden = true;
+    function pintarMusculos() {
+      chipsMusc.textContent = "";
+      Object.keys(GRUPOS).forEach(function (g) {
+        var n = musc[g] || 0;
+        chipsMusc.appendChild(h("button", { type: "button", class: n === 2 ? "p" : n === 1 ? "s" : "", "aria-pressed": n ? "true" : "false",
+          "aria-label": GRUPOS[g] + (n === 2 ? " (principal)" : n === 1 ? " (también)" : ""), text: GRUPOS[g],
+          onclick: function () { musc[g] = n === 0 ? 2 : n === 2 ? 1 : 0; tocoMusculos = true; pintarMusculos(); } }));
+      });
+    }
+    function pintarEquipo() {
+      chipsEq.textContent = "";
+      FILTROS_EQUIPO.slice(1).forEach(function (q) {
+        chipsEq.appendChild(h("button", { type: "button", class: equipo === q[0] ? "p" : "", "aria-pressed": equipo === q[0] ? "true" : "false", text: q[1],
+          onclick: function () { equipo = equipo === q[0] ? "" : q[0]; tocoEquipo = true; pintarEquipo(); } }));
+      });
+    }
+    function alCambiarNombre() {
+      var fi = fichaActual(), n = campo.value.trim();
+      var otro = n && claveEj(n) !== claveEj(nombreViejo || "") ? misEjercicios().filter(function (e) { return claveEj(e.nombre) === claveEj(n) && (nombreViejo || e.fila); })[0] : null;
+      if (!n) sugerencia.textContent = "";
+      else if (otro) sugerencia.textContent = "⚠ Ya tienes un ejercicio que se llama «" + otro.nombre + "».";
+      else if (fi) sugerencia.textContent = "✓ Está en la biblioteca (" + fi.n + "): fotos, músculos y «Cómo hacerlo» listos. Cambia solo lo que quieras.";
+      else sugerencia.textContent = "No está en la biblioteca: sube tus fotos y marca los músculos.";
+      if (!tocoMusculos) { musc = {}; if (fi) { fi.s.forEach(function (g) { musc[g] = 1; }); fi.p.forEach(function (g) { musc[g] = 2; }); } pintarMusculos(); }
+      if (!tocoEquipo) { equipo = fi ? fi.eq : ""; pintarEquipo(); }
+      pasos.placeholder = fi ? "Si lo dejas vacío se usa el de la biblioteca: «" + fi.pasos[0] + "»…" : "Un paso por línea.";
+      pintarRanuras();
+    }
+    campo.addEventListener("input", alCambiarNombre);
+
+    var guardar = h("button", { class: "btn lima", type: "button", text: "Guardar ejercicio", onclick: function () {
+      var n = campo.value.trim();
+      if (!n) return aviso("Escribe el nombre del ejercicio.", true);
+      var renombra = nombreViejo && n !== nombreViejo;
+      var cambiaClave = nombreViejo && claveEj(n) !== claveEj(nombreViejo);
+      var otro = misEjercicios().filter(function (e) { return claveEj(e.nombre) === claveEj(n); })[0];
+      if (otro && (nombreViejo ? cambiaClave : !!otro.fila)) return aviso("Ya tienes un ejercicio que se llama «" + otro.nombre + "». Usa otro nombre.", true);
+      var cuantas = renombra ? estado.tablas.series_gym.filter(function (s) { return claveEj(s.ejercicio) === claveEj(nombreViejo); }).length : 0;
+      var enRutinas = renombra ? estado.tablas.rutinas.filter(function (t) { return claveEj(t.ejercicio) === claveEj(nombreViejo); }).length : 0;
+      if (renombra && (cuantas || enRutinas) && !confirm("¿Cambiar «" + nombreViejo + "» por «" + n + "»? También se cambia en " + plural(cuantas, "serie registrada", "series registradas") + " y en " + plural(enRutinas, "tarjeta de rutina", "tarjetas de rutinas") + ".")) return;
+      var fi = fichaActual();
+      var pr = Object.keys(musc).filter(function (g) { return musc[g] === 2; }).sort(), se = Object.keys(musc).filter(function (g) { return musc[g] === 1; }).sort();
+      var igualFicha = fi && pr.join() === fi.p.slice().sort().join() && se.join() === fi.s.filter(function (g) { return fi.p.indexOf(g) < 0; }).sort().join();
+      var datos = { nombre: n, principales: igualFicha ? null : pr.join(",") || null, secundarios: igualFicha ? null : se.join(",") || null,
+        equipo: equipo && !(fi && fi.eq === equipo) ? equipo : null, pasos: pasos.value.trim() || null, nota: nota.value.trim() || null };
+      var viejas = fila ? [fila.foto_a, fila.foto_b].filter(function (x) { return x && !/^bd:/.test(x); }) : (d && d.propias ? d.propias.slice() : []);
+      guardar.disabled = true; guardar.textContent = "Subiendo fotos…";
+      var subir = function (lado) {
+        var f = fotos[lado];
+        if (fotos.modo !== "propias" || !f) return Promise.resolve(null);
+        if (f.id) return Promise.resolve(f.id);
+        return api("subirFoto", { imagen: f.datos }).then(function (r) { guardarFotoLocal(r.id, f.datos); f.id = r.id; delete f.datos; return r.id; });
+      };
+      subir("a").then(function (a) { datos.foto_a = fotos.modo === "bd" ? "bd:" + fotos.bd : a; return subir("b"); }).then(function (b) {
+        datos.foto_b = fotos.modo === "propias" ? b : null;
+        guardar.textContent = "Guardando…";
+        if (fila) return api("actualizar", { tabla: "ejercicios", id: fila.id, fila: datos }).then(function () { Object.assign(fila, datos); });
+        return api("agregar", { tabla: "ejercicios", fila: datos }).then(function (r) { estado.tablas.ejercicios.push(Object.assign({ id: r.id, creado_en: new Date().toISOString() }, datos)); });
+      }).then(function () {
+        if (!renombra || !(cuantas || enRutinas)) return;
+        guardar.textContent = "Cambiando el nombre…";
+        return renombrarEnServicio(nombreViejo, n);
+      }).then(function () {
+        guardarCache();
+        var sueltas = viejas.filter(function (id) { return id !== datos.foto_a && id !== datos.foto_b; });
+        cerrarHoja(); aviso("Ejercicio guardado: «" + n + "»"); pintar();
+        if (alGuardar) alGuardar(n);
+        return borrarFotosSueltas(sueltas);
+      }, function (e) { guardarCache(); guardar.disabled = false; guardar.textContent = "Guardar ejercicio"; manejarError(e); });
+    } });
+    var quitar = fila ? h("button", { class: "btn peligro", type: "button", text: d.ficha ? "Quitar mis cambios (volver a la biblioteca)" : "Borrar este ejercicio", onclick: function () {
+      if (!confirm(d.ficha ? "¿Volver a las fotos, músculos y pasos de la biblioteca? Tus fotos de este ejercicio se borran." : "¿Borrar «" + fila.nombre + "»? Tus series registradas y tus rutinas no se borran, pero quedará sin fotos.")) return;
+      quitar.disabled = true;
+      api("borrar", { tabla: "ejercicios", id: fila.id }).then(function () {
+        estado.tablas.ejercicios = estado.tablas.ejercicios.filter(function (x) { return x !== fila; }); guardarCache();
+        cerrarHoja(); aviso(d.ficha ? "Listo: vuelve a la biblioteca" : "Ejercicio borrado"); pintar();
+        return borrarFotosSueltas([fila.foto_a, fila.foto_b].filter(function (x) { return x && !/^bd:/.test(x); }));
+      }, function (e) { quitar.disabled = false; manejarError(e); });
+    } }) : null;
+
+    abrirHoja(nombre ? "Editar ejercicio" : "Crear ejercicio", h("div", { class: "editor-tar" },
+      h("label", { for: "f-ej-nombre", text: "Nombre (como en Smart Fit)" }), campo, opciones, sugerencia,
+      h("label", { text: "Fotos" }), ranuras,
+      h("div", { class: "chips-subir" },
+        selector("📷 Subir A y B juntas", 2), selector("📷 Subir A", 1, "a"), selector("📷 Subir B", 1, "b"),
+        h("button", { type: "button", class: "chip-subir", text: "📚 Elegir de la biblioteca", onclick: function () { buscadorBD.hidden = !buscadorBD.hidden; if (!buscadorBD.hidden) buscadorBD.abrir(); } }),
+        h("button", { type: "button", class: "chip-subir", text: "↺ Automática", onclick: function () { fotos.modo = "auto"; fotos.a = null; fotos.b = null; fotos.bd = null; pintarRanuras(); } })),
+      notaFotos, buscadorBD,
+      h("p", { class: "ayuda", text: "Sirve una captura de pantalla o una foto de tu galería. Si subes una sola con las dos posiciones lado a lado, la app la parte en A y B. Si trae más cosas, recórtala antes en tu galería." }),
+      h("label", { text: "Qué trabaja · toca una vez = principal, otra vez = también, otra = quitar" }), chipsMusc,
+      h("label", { text: "Equipo" }), chipsEq,
+      h("label", { for: "f-ej-pasos", text: "Cómo hacerlo (opcional)" }), pasos,
+      h("label", { for: "f-ej-nota", text: "Nota (opcional)" }), nota,
+      guardar,
+      h("p", { class: "ayuda centro", text: "Los cambios se ven en todas tus rutinas. Si cambias el nombre, también se corrige en tu historial de series." }),
+      quitar));
+    alCambiarNombre();
+    if (nombre) sugerencia.textContent = "";
+  }
+
+  /** Cambia el nombre en tus series, rutinas y ejercicios (en tu hoja y en el teléfono). */
+  function renombrarEnServicio(viejo, nuevo) {
+    return api("renombrar", { viejo: viejo, nuevo: nuevo }).then(function () {
+      var k = claveEj(viejo);
+      estado.tablas.series_gym.forEach(function (s) { if (claveEj(s.ejercicio) === k) s.ejercicio = nuevo; });
+      if (hayRutinas()) estado.tablas.rutinas.forEach(function (t) { if (claveEj(t.ejercicio) === k) t.ejercicio = nuevo; });
+      if (hayEjercicios()) estado.tablas.ejercicios.forEach(function (f) { if (claveEj(f.nombre) === k) f.nombre = nuevo; });
+      var pers = leerPersonal();
+      if (pers[k]) { pers[claveEj(nuevo)] = pers[k]; delete pers[k]; guardarPersonal(pers); }
+    });
+  }
+
+  /**
+   * Una sola vez: lo que estaba en las tarjetas de rutina (fotos y músculos, servicio v4) y la foto elegida en este
+   * celular (Ajustes, antes) pasa a «Mis ejercicios». Las tarjetas quedan solo con peso, series y repeticiones.
+   */
+  var migrando = false;
+  function migrarEjercicios() {
+    if (migrando || !hayEjercicios() || !hayRutinas()) return Promise.resolve(false);
+    var tarjetas = estado.tablas.rutinas.filter(function (t) { return t.foto_a || t.foto_b || t.principales || t.secundarios; });
+    var personal = leerPersonal(), nombres = {};
+    misEjercicios().forEach(function (e) { nombres[claveEj(e.nombre)] = e.nombre; });
+    var claves = Object.keys(personal).filter(function (k) { return personal[k] && personal[k].foto && nombres[k] && !filaEjercicio(nombres[k]); });
+    if (!tarjetas.length && !claves.length) { if (Object.keys(personal).length && !claves.length) borrarLocal("ejercicios_personal"); return Promise.resolve(false); }
+    migrando = true;
+    var paso = Promise.resolve();
+    tarjetas.forEach(function (t) {
+      paso = paso.then(function () {
+        var crear = filaEjercicio(t.ejercicio) ? Promise.resolve() : (function () {
+          var m = musculosElegidos(t), fi = fichaDe(t.ejercicio);
+          var igual = m && fi && m.p.slice().sort().join() === fi.p.slice().sort().join() && m.s.slice().sort().join() === fi.s.filter(function (g) { return fi.p.indexOf(g) < 0; }).sort().join();
+          var datos = { nombre: String(t.ejercicio).trim(), foto_a: t.foto_a || null, foto_b: t.foto_b || null,
+            principales: m && !igual ? m.p.join(",") || null : null, secundarios: m && !igual ? m.s.join(",") || null : null };
+          return api("agregar", { tabla: "ejercicios", fila: datos }).then(function (r) { estado.tablas.ejercicios.push(Object.assign({ id: r.id }, datos)); });
+        })();
+        var viejas = [t.foto_a, t.foto_b];
+        return crear.then(function () { return actualizarTarjeta(t, { foto_a: null, foto_b: null, principales: null, secundarios: null }); })
+          .then(function () { return borrarFotosSueltas(viejas); });
+      });
+    });
+    claves.forEach(function (k) {
+      paso = paso.then(function () {
+        var p = personal[k];
+        var datos = { nombre: nombres[k], foto_a: "bd:" + p.foto, principales: (p.principales || []).join(",") || null, secundarios: (p.secundarios || []).join(",") || null };
+        return api("agregar", { tabla: "ejercicios", fila: datos }).then(function (r) { estado.tablas.ejercicios.push(Object.assign({ id: r.id }, datos)); });
+      });
+    });
+    return paso.then(function () {
+      borrarLocal("ejercicios_personal"); migrando = false; guardarCache(); return true;
+    }, function () { migrando = false; guardarCache(); return false; });
   }
 
   // ---------- Mis rutinas: tarjetas armadas a tu gusto, con tus fotos ----------
@@ -1501,39 +1777,11 @@
     if (t.principales === "pecho" && t.secundarios === "triceps" && /abdomin|crunch/.test(sinTildes(t.ejercicio))) return null;
     return { p: listaGrupos(t.principales), s: listaGrupos(t.secundarios) };
   }
-  function musculosTarjeta(t) {
-    var el = musculosElegidos(t), p = el ? el.p : [], s = el ? el.s : [];
-    if (!p.length && !s.length) { var inf = infoEjercicio(t.ejercicio); p = inf.principales; s = inf.secundarios; }
-    return { p: p, s: s.filter(function (g) { return p.indexOf(g) < 0; }) };
-  }
-  /** Las fotos de una tarjeta: las tuyas (A y B) o las de la biblioteca. */
-  function fotosTarjeta(t) {
-    if (t.foto_a || t.foto_b) return { propias: [t.foto_a, t.foto_b].filter(Boolean) };
-    var inf = infoEjercicio(t.ejercicio);
-    return inf.foto ? { biblio: inf } : {};
-  }
-  function bloqueFotos(t) {
-    var f = fotosTarjeta(t), caja = h("div", { class: "tar-fotos" });
-    if (f.propias) {
-      caja.classList.toggle("una", f.propias.length === 1);
-      f.propias.forEach(function (id, k) {
-        var b = h("button", { type: "button", class: "tar-foto propia", "aria-label": "Ver en grande la foto " + (k ? "B" : "A") + " de " + t.ejercicio, onclick: function () {
-          traerFotos(f.propias).then(function (m) { abrirVisorFoto({ srcs: f.propias.map(function (x) { return m[x]; }).filter(Boolean) }, t.ejercicio, k); }, manejarError);
-        } }, imgSubida(id, ""), h("span", { class: "ab", text: f.propias.length === 1 ? "A · B" : k ? "B · final" : "A · inicio" }));
-        caja.appendChild(b);
-      });
-    } else if (f.biblio) {
-      [0, 1].forEach(function (k) {
-        var img = h("img", { src: FOTOS_EJ + f.biblio.foto + "/" + k + ".jpg", alt: "", loading: "lazy" });
-        caja.appendChild(h("button", { type: "button", class: "tar-foto biblio", "aria-label": "Ver en grande la foto " + (k ? "B" : "A") + " de " + t.ejercicio, onclick: function () { abrirVisorFoto(f.biblio, t.ejercicio, k); } },
-          img, h("span", { class: "ab", text: k ? "B · final" : "A · inicio" })));
-      });
-    } else return null;
-    return caja;
-  }
   function filaTarjeta(t, cambios) {
     var f = {};
-    ["rutina", "orden", "ejercicio", "peso_kg", "series", "repeticiones", "principales", "secundarios", "nota", "foto_a", "foto_b"].forEach(function (c) { f[c] = vacio(t[c]) ? null : t[c]; });
+    ["rutina", "orden", "ejercicio", "peso_kg", "series", "repeticiones", "nota"].forEach(function (c) { f[c] = vacio(t[c]) ? null : t[c]; });
+    // Las fotos y los músculos van en el ejercicio, no en la tarjeta (se conservan si aún no se pasaron)
+    ["principales", "secundarios", "foto_a", "foto_b"].forEach(function (c) { f[c] = vacio(t[c]) ? null : t[c]; });
     return Object.assign(f, cambios || {});
   }
   /** Guarda en tu hoja y en el teléfono sin volver a cargar todo. */
@@ -1543,59 +1791,39 @@
       Object.assign(t, fila); guardarCache();
     });
   }
-  function fotoEnUso(id, menos) {
-    return estado.tablas.rutinas.some(function (t) { return t !== menos && (t.foto_a === id || t.foto_b === id); });
+  function fotoEnUso(id) {
+    var usa = function (x) { return x.foto_a === id || x.foto_b === id; };
+    return (hayRutinas() && estado.tablas.rutinas.some(usa)) || (hayEjercicios() && estado.tablas.ejercicios.some(usa));
   }
-  function borrarFotosSueltas(ids, menos) {
+  function borrarFotosSueltas(ids) {
     return ids.filter(Boolean).reduce(function (p, id) {
-      return p.then(function () { if (!fotoEnUso(id, menos)) return api("borrarFoto", { id: id }).catch(function () { /* queda una foto sin usar: no molesta */ }); });
+      return p.then(function () { if (!fotoEnUso(id)) return api("borrarFoto", { id: id }).catch(function () { /* queda una foto sin usar: no molesta */ }); });
     }, Promise.resolve());
   }
-  function ultimoRegistro(nombre) {
-    var e = historialEjercicios()[sinTildes(String(nombre).trim())];
-    return e && e.sesiones.length ? e.sesiones[e.sesiones.length - 1] : null;
-  }
-
-  function avisoServicioRutinas() {
+  function avisoServicio(texto) {
     return h("div", { class: "vacio" },
-      h("p", { style: "margin:0 0 4px", text: "Para guardar tus rutinas con tus fotos hay que actualizar tu servicio de Google (versión 4). Toma 2 minutos." }),
+      h("p", { style: "margin:0 0 4px", text: texto }),
       h("button", { class: "btn lima", text: "Ver cómo", onclick: abrirAjustes }));
   }
-  function irA_(pantalla) { return function () { estado.pantalla = pantalla; pintar(); window.scrollTo(0, 0); }; }
+  function irTab(tab) { return function () { estado.pantalla = "entreno"; estado.tabEntreno = tab; pintar(); window.scrollTo(0, 0); }; }
 
-  function pintarRutinas() {
-    raiz.textContent = "";
-    bandas();
-    raiz.appendChild(h("div", { class: "top" },
-      h("button", { class: "icono-btn", "aria-label": "Volver a Entreno", onclick: irA_("entreno") }, icono("atras", 20)),
-      h("div", { class: "top-centro" }, h("div", { class: "sub", text: "Entreno" }), h("div", { class: "titulo", text: "Mis rutinas" })),
-      botonAjustes()));
-    if (!estado.tablas) { raiz.appendChild(h("div", { class: "vacio", text: "Para ver tus rutinas, la app necesita la versión nueva del servicio de Google." })); raiz.appendChild(navegacion("entreno")); return; }
-    if (!hayRutinas()) raiz.appendChild(avisoServicioRutinas());
-    else {
-      var rs = rutinasAgrupadas();
-      if (!rs.length) raiz.appendChild(h("p", { class: "ayuda", text: "Aún no tienes rutinas. Crea la primera: ponle nombre (por ejemplo «Pecho - Hombro - Tríceps») y agrega tus ejercicios con sus fotos." }));
-      rs.forEach(function (r) {
-        var grupos = [];
-        r.tarjetas.forEach(function (t) { var m = musculosTarjeta(t); m.p.forEach(function (g) { if (grupos.indexOf(g) < 0) grupos.push(g); }); });
-        var ultima = r.tarjetas.map(function (t) { var u = ultimoRegistro(t.ejercicio); return u ? u.fecha : ""; }).sort().pop();
-        var mini = h("span", { class: "rut-mini" }), f = r.tarjetas.length ? fotosTarjeta(r.tarjetas[0]) : {};
-        if (f.propias) mini.appendChild(imgSubida(f.propias[0], ""));
-        else if (f.biblio) mini.appendChild(h("img", { src: FOTOS_EJ + f.biblio.foto + "/0.jpg", alt: "", loading: "lazy" }));
-        else mini.textContent = "🏋️";
-        raiz.appendChild(h("button", { type: "button", class: "rut-card", onclick: function () { estado.rutinaActual = r.nombre; estado.pantalla = "rutina"; pintar(); window.scrollTo(0, 0); } },
-          mini,
-          h("span", { class: "rut-t" }, h("b", { text: r.nombre }),
-            h("small", { text: plural(r.tarjetas.length, "ejercicio", "ejercicios") + (ultima ? " · última vez: " + fechaLarga(ultima).toLowerCase() : "") }),
-            h("span", { class: "bib-tags" }, grupos.slice(0, 5).map(function (g) { return h("span", { class: "tag verde", text: GRUPOS[g] }); }))),
-          icono("sig", 16)));
-      });
-      raiz.appendChild(h("button", { type: "button", class: "nueva-rutina", text: "＋ Nueva rutina", onclick: abrirNuevaRutina }));
-    }
-    raiz.appendChild(h("button", { type: "button", class: "btn-biblio", onclick: irA_("ejercicios") },
-      h("span", { class: "emo", "aria-hidden": "true", text: "📚" }),
-      h("span", { class: "t" }, h("b", { text: "Biblioteca de ejercicios" }), h("small", { text: "Para ver cómo se hace cada uno" })), icono("sig", 18)));
-    raiz.appendChild(navegacion("entreno"));
+  /** Pestaña «Rutinas» de Entreno. */
+  function pintarTabRutinas() {
+    if (!hayRutinas()) { raiz.appendChild(avisoServicio("Para guardar tus rutinas hay que actualizar tu servicio de Google. Toma 2 minutos.")); return; }
+    var rs = rutinasAgrupadas();
+    if (!rs.length) raiz.appendChild(h("p", { class: "ayuda", text: "Aún no tienes rutinas. Crea la primera: ponle nombre (por ejemplo «Pecho - Hombro - Tríceps») y elige tus ejercicios." }));
+    rs.forEach(function (r) {
+      var grupos = [];
+      r.tarjetas.forEach(function (t) { infoEjercicio(t.ejercicio).principales.forEach(function (g) { if (grupos.indexOf(g) < 0) grupos.push(g); }); });
+      var ultima = r.tarjetas.map(function (t) { var u = ultimoRegistro(t.ejercicio); return u ? u.fecha : ""; }).sort().pop();
+      raiz.appendChild(h("button", { type: "button", class: "rut-card", onclick: function () { estado.rutinaActual = r.nombre; estado.pantalla = "rutina"; pintar(); window.scrollTo(0, 0); } },
+        r.tarjetas.length ? miniEjercicio(infoEjercicio(r.tarjetas[0].ejercicio), "rut-mini") : h("span", { class: "rut-mini", text: "🏋️" }),
+        h("span", { class: "rut-t" }, h("b", { text: r.nombre }),
+          h("small", { text: plural(r.tarjetas.length, "ejercicio", "ejercicios") + (ultima ? " · última vez: " + fechaLarga(ultima).toLowerCase() : "") }),
+          h("span", { class: "bib-tags" }, grupos.slice(0, 5).map(function (g) { return h("span", { class: "tag verde", text: GRUPOS[g] }); }))),
+        icono("sig", 16)));
+    });
+    raiz.appendChild(h("button", { type: "button", class: "nueva-rutina", text: "＋ Nueva rutina", onclick: abrirNuevaRutina }));
   }
 
   function abrirNuevaRutina() {
@@ -1606,9 +1834,9 @@
       if (!n) return aviso("Escribe el nombre de la rutina.", true);
       if (rutinaPorNombre(n).tarjetas.length) return aviso("Ya tienes una rutina con ese nombre.", true);
       cerrarHoja(); estado.rutinaActual = n; estado.pantalla = "rutina"; pintar(); window.scrollTo(0, 0);
-      abrirEditorTarjeta(n, null);
+      abrirAgregarARutina(n);
     } }, h("label", { for: "f-rutina-nombre", text: "Nombre (como la llamas en Smart Fit)" }), campo,
-      h("button", { class: "btn lima", type: "submit", text: "Crear y agregar el primer ejercicio" })));
+      h("button", { class: "btn lima", type: "submit", text: "Crear y elegir el primer ejercicio" })));
     setTimeout(function () { campo.focus(); }, 50);
   }
 
@@ -1617,19 +1845,19 @@
     bandas();
     var r = rutinaPorNombre(estado.rutinaActual || "");
     raiz.appendChild(h("div", { class: "top" },
-      h("button", { class: "icono-btn", "aria-label": "Volver a Mis rutinas", onclick: irA_("rutinas") }, icono("atras", 20)),
-      h("div", { class: "top-centro" }, h("div", { class: "sub", text: "Mis rutinas" }), h("div", { class: "titulo", text: r.nombre })),
+      h("button", { class: "icono-btn", "aria-label": "Volver a Rutinas", onclick: irTab("rutinas") }, icono("atras", 20)),
+      h("div", { class: "top-centro" }, h("div", { class: "sub", text: "Rutinas" }), h("div", { class: "titulo", text: r.nombre })),
       r.tarjetas.length ? h("button", { class: "icono-btn", "aria-label": "Editar rutina", onclick: function () { abrirEditarRutina(r); } }, h("span", { "aria-hidden": "true", text: "✎" })) : null));
-    if (!hayRutinas()) { raiz.appendChild(avisoServicioRutinas()); raiz.appendChild(navegacion("entreno")); return; }
-    if (!r.tarjetas.length) raiz.appendChild(h("p", { class: "ayuda", text: "Esta rutina aún no tiene ejercicios. Agrega el primero: con su peso, sus fotos y los músculos que trabaja." }));
+    if (!hayRutinas()) { raiz.appendChild(avisoServicio("Para guardar tus rutinas hay que actualizar tu servicio de Google. Toma 2 minutos.")); raiz.appendChild(navegacion("entreno")); return; }
+    if (!r.tarjetas.length) raiz.appendChild(h("p", { class: "ayuda", text: "Esta rutina aún no tiene ejercicios. Elige el primero." }));
     r.tarjetas.forEach(function (t, i) {
-      var m = musculosTarjeta(t), u = ultimoRegistro(t.ejercicio), ficha = fichaDe(t.ejercicio);
+      var info = infoEjercicio(t.ejercicio), u = ultimoRegistro(t.ejercicio);
       var meta = [];
       if (t.series || t.repeticiones) meta.push((t.series ? fmt(t.series) : "?") + " × " + (t.repeticiones ? fmt(t.repeticiones) : "?"));
-      if (u) meta.push("último registro: " + textoSerie(mejorSerie(u)) + " (" + corta(u.fecha) + ")");
-      var mover = function (d) {
+      if (u) meta.push("último: " + textoSerie(mejorSerie(u)) + " (" + corta(u.fecha) + ")");
+      var mover = function (dir) {
         return function () {
-          var l = r.tarjetas.slice(), j = i + d;
+          var l = r.tarjetas.slice(), j = i + dir;
           l.splice(j, 0, l.splice(i, 1)[0]);
           var cambia = l.map(function (x, k) { return [x, k + 1]; }).filter(function (p) { return Number(p[0].orden) !== p[1]; });
           var boton = this; boton.disabled = true;
@@ -1640,19 +1868,124 @@
       raiz.appendChild(h("div", { class: "tarjeta-ej" },
         h("div", { class: "tar-cab" }, h("b", { text: t.ejercicio }), vacio(t.peso_kg) ? null : h("span", { class: "tar-kg", text: fmt(t.peso_kg, 1) + " kg" })),
         meta.length ? h("div", { class: "tar-meta", text: meta.join(" · ") }) : null,
-        bloqueFotos(t),
-        m.p.length || m.s.length ? h("div", { class: "tar-trab" }, h("span", { class: "l", text: "Trabaja" }),
-          m.p.map(function (g) { return h("span", { class: "ch p", text: GRUPOS[g] }); }),
-          m.s.map(function (g) { return h("span", { class: "ch", text: GRUPOS[g] }); })) : null,
+        fotosAB(info, t.ejercicio, "tar-fotos", "tar-foto"),
+        info.principales.length || info.secundarios.length ? h("div", { class: "tar-trab" }, h("span", { class: "l", text: "Trabaja" }),
+          info.principales.map(function (g) { return h("span", { class: "ch p", text: GRUPOS[g] }); }),
+          info.secundarios.map(function (g) { return h("span", { class: "ch", text: GRUPOS[g] }); })) : null,
         t.nota ? h("div", { class: "tar-nota", text: "📝 " + t.nota }) : null,
         h("div", { class: "tar-pie" },
           h("button", { type: "button", class: "mini-nav", "aria-label": "Subir " + t.ejercicio, disabled: i === 0, onclick: mover(-1) }, "↑"),
           h("button", { type: "button", class: "mini-nav", "aria-label": "Bajar " + t.ejercicio, disabled: i === r.tarjetas.length - 1, onclick: mover(1) }, "↓"),
-          ficha ? h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", onclick: function () { abrirFicha(ficha); } }) : null,
-          h("button", { type: "button", class: "ej-editar", text: "Editar", "aria-label": "Editar " + t.ejercicio, onclick: function () { abrirEditorTarjeta(r.nombre, t); } }))));
+          h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Ejercicio", "aria-label": "Ver el ejercicio " + t.ejercicio, onclick: function () { abrirEjercicio(t.ejercicio); } }),
+          h("button", { type: "button", class: "ej-editar", text: "Peso y series", "aria-label": "Peso y series de " + t.ejercicio, onclick: function () { abrirTarjetaRutina(t); } }))));
     });
-    raiz.appendChild(h("button", { type: "button", class: "btn sec agregar-ej", text: "＋ Agregar ejercicio", onclick: function () { abrirEditorTarjeta(r.nombre, null); } }));
+    raiz.appendChild(h("button", { type: "button", class: "btn sec agregar-ej", text: "＋ Agregar ejercicio", onclick: function () { abrirAgregarARutina(r.nombre); } }));
     raiz.appendChild(navegacion("entreno"));
+  }
+
+  function camposPeso(valores) {
+    var peso = h("input", { id: "f-tar-peso", type: "number", inputmode: "decimal", min: 0, max: 1000, step: "0.5", value: vacio(valores.peso_kg) ? "" : valores.peso_kg, "aria-label": "Peso en kg" });
+    var series = h("input", { id: "f-tar-series", type: "number", inputmode: "numeric", min: 1, max: 50, value: valores.series || "", "aria-label": "Series" });
+    var reps = h("input", { id: "f-tar-reps", type: "number", inputmode: "numeric", min: 1, max: 1000, value: valores.repeticiones || "", "aria-label": "Repeticiones" });
+    var caja = h("div", { class: "fila3" },
+      h("div", {}, h("label", { for: "f-tar-peso", text: "Peso (kg)" }), peso),
+      h("div", {}, h("label", { for: "f-tar-series", text: "Series" }), series),
+      h("div", {}, h("label", { for: "f-tar-reps", text: "Reps" }), reps));
+    return {
+      caja: caja, peso: peso, series: series, reps: reps,
+      llenar: function (u) { peso.value = u && u.max ? u.max : ""; series.value = u ? u.series.length : ""; reps.value = u ? mejorSerie(u).repeticiones || "" : ""; },
+      leer: function () {
+        var num = function (el, min, max, ent, txt) {
+          if (el.value === "") return null;
+          var v = Number(String(el.value).replace(",", "."));
+          if (!isFinite(v) || v < min || v > max || (ent && Math.floor(v) !== v)) throw new Error(txt);
+          return v;
+        };
+        return { peso_kg: num(peso, 0, 1000, false, "Revisa el peso (0 a 1000 kg)."), series: num(series, 1, 50, true, "Revisa las series (1 a 50)."), repeticiones: num(reps, 1, 1000, true, "Revisa las repeticiones.") };
+      }
+    };
+  }
+
+  /** Agregar a la rutina: elegir un ejercicio ya listo y ponerle peso, series y repeticiones. */
+  function abrirAgregarARutina(rutina, preelegido) {
+    var buscar = h("input", { id: "f-buscar-rutina", type: "search", placeholder: "Busca entre tus ejercicios…", "aria-label": "Buscar ejercicio", autocomplete: "off" });
+    var lista = h("div", { class: "elegir-lista", role: "listbox", "aria-label": "Ejercicios" });
+    var c = camposPeso({});
+    var nota = h("input", { id: "f-tar-nota", type: "text", maxlength: 200, placeholder: "Nota para esta rutina (opcional)", "aria-label": "Nota" });
+    var elegido = null, elegidoFicha = null;
+    var boton = h("button", { class: "btn lima", type: "button", text: "Elige un ejercicio", disabled: true });
+    var mios = misEjercicios(), yaEn = rutinaPorNombre(rutina).tarjetas.map(function (t) { return claveEj(t.ejercicio); });
+    function elegir(n, fi) {
+      elegido = n; elegidoFicha = fi || null;
+      c.llenar(ultimoRegistro(n));
+      boton.disabled = false; boton.textContent = "Agregar «" + n + "»";
+      mostrar();
+    }
+    function mostrar() {
+      lista.textContent = "";
+      var palabras = sinTildes(buscar.value).split(/[^a-z0-9ñ]+/).filter(Boolean);
+      var pasa = function (texto) { texto = sinTildes(texto); return palabras.every(function (w) { return texto.indexOf(w) >= 0; }); };
+      var items = mios.filter(function (e) { var d = datosEjercicio(e.nombre); return pasa(e.nombre + " " + nombresGrupos(d.p.concat(d.s))); }).map(function (e) { return { n: e.nombre }; });
+      // Al buscar, también los de la biblioteca que aún no son tuyos
+      if (palabras.length) {
+        var usadas = mios.map(function (e) { return fichaDe(e.nombre); });
+        BIBLIOTECA.forEach(function (fi) { if (!fi.oculto && usadas.indexOf(fi) < 0 && pasa(fi.n + " " + fi.t + " " + nombresGrupos(fi.p))) items.push({ n: fi.n, fi: fi, biblio: true }); });
+      }
+      if (elegido && !items.some(function (x) { return claveEj(x.n) === claveEj(elegido); })) items.unshift({ n: elegido, fi: elegidoFicha });
+      items.slice(0, 40).forEach(function (x) {
+        var d = datosEjercicio(x.n, x.fi), sel = elegido && claveEj(x.n) === claveEj(elegido);
+        lista.appendChild(h("button", { type: "button", class: "elegir-op" + (sel ? " sel" : ""), role: "option", "aria-selected": sel ? "true" : "false", "aria-label": x.n, onclick: function () { elegir(x.n, x.fi); } },
+          miniEjercicio({ foto: d.foto, propias: d.propias }, "elegir-foto"),
+          h("span", { class: "bib-t" }, h("b", { text: x.n }), h("span", { class: "ej-m", text: nombresGrupos(d.p) || "Sin músculos" }),
+            yaEn.indexOf(claveEj(x.n)) >= 0 ? h("span", { class: "nota", text: "Ya está en esta rutina" }) : x.biblio ? h("span", { class: "nota", text: "De la biblioteca" }) : null),
+          h("span", { class: "elegir-ok", "aria-hidden": "true", text: sel ? "✓" : "" })));
+      });
+      if (!items.length) lista.appendChild(h("p", { class: "ayuda", text: palabras.length ? "No está. Créalo con «＋ Crear ejercicio»." : "Aún no tienes ejercicios: busca en la biblioteca escribiendo arriba, o crea uno." }));
+    }
+    buscar.addEventListener("input", mostrar);
+    boton.addEventListener("click", function () {
+      var datos;
+      try { datos = c.leer(); } catch (e) { return aviso(e.message, true); }
+      var orden = rutinaPorNombre(rutina).tarjetas.reduce(function (m, x) { return Math.max(m, Number(x.orden) || 0); }, 0) + 1;
+      var fila = Object.assign(datos, { rutina: rutina, orden: orden, ejercicio: elegido, nota: nota.value.trim() || null });
+      boton.disabled = true; boton.textContent = "Guardando…";
+      api("agregar", { tabla: "rutinas", fila: fila }).then(function (r) {
+        estado.tablas.rutinas.push(Object.assign({ id: r.id, creado_en: new Date().toISOString() }, fila)); guardarCache();
+        cerrarHoja(); aviso("Ejercicio agregado a «" + rutina + "»"); pintar();
+      }, function (e) { boton.disabled = false; boton.textContent = "Agregar «" + elegido + "»"; manejarError(e); });
+    });
+    abrirHoja("Agregar a «" + rutina + "»", h("div", { class: "editor-tar" },
+      buscar, lista,
+      h("button", { type: "button", class: "chip-subir crear-ej", text: "＋ Crear ejercicio", onclick: function () { abrirEditarEjercicio(null, function (n) { abrirAgregarARutina(rutina, n); }); } }),
+      c.caja, h("label", { for: "f-tar-nota", text: "Nota (opcional)" }), nota, boton));
+    if (preelegido) elegir(preelegido); else mostrar();
+  }
+
+  /** Peso, series, repeticiones y nota de un ejercicio dentro de la rutina. */
+  function abrirTarjetaRutina(t) {
+    var c = camposPeso(t), info = infoEjercicio(t.ejercicio);
+    var nota = h("input", { id: "f-tar-nota", type: "text", maxlength: 200, value: t.nota || "", placeholder: "Nota para esta rutina (opcional)", "aria-label": "Nota" });
+    var guardar = h("button", { class: "btn lima", type: "button", text: "Guardar", onclick: function () {
+      var datos;
+      try { datos = c.leer(); } catch (e) { return aviso(e.message, true); }
+      datos.nota = nota.value.trim() || null;
+      guardar.disabled = true;
+      actualizarTarjeta(t, datos).then(function () { cerrarHoja(); aviso("Guardado"); pintar(); }, function (e) { guardar.disabled = false; manejarError(e); });
+    } });
+    var quitar = h("button", { class: "btn peligro", type: "button", text: "Quitar de la rutina", onclick: function () {
+      if (!confirm("¿Quitar «" + t.ejercicio + "» de la rutina? El ejercicio y tus series registradas no se borran.")) return;
+      quitar.disabled = true;
+      api("borrar", { tabla: "rutinas", id: t.id }).then(function () {
+        estado.tablas.rutinas = estado.tablas.rutinas.filter(function (x) { return x !== t; }); guardarCache();
+        cerrarHoja(); aviso("Ejercicio quitado"); pintar();
+        return borrarFotosSueltas([t.foto_a, t.foto_b]);
+      }, function (e) { quitar.disabled = false; manejarError(e); });
+    } });
+    abrirHoja(t.ejercicio, h("div", { class: "editor-tar" },
+      h("div", { class: "elegir-op sel" }, miniEjercicio(info, "elegir-foto"), h("span", { class: "bib-t" }, h("b", { text: t.ejercicio }), h("span", { class: "ej-m", text: nombresGrupos(info.principales) }))),
+      c.caja, h("label", { for: "f-tar-nota", text: "Nota (opcional)" }), nota, guardar,
+      h("button", { class: "btn sec", type: "button", text: "✎ Editar el ejercicio (fotos, músculos…)", onclick: function () { abrirEditarEjercicio(t.ejercicio); } }),
+      quitar));
   }
 
   function abrirEditarRutina(r) {
@@ -1666,169 +1999,22 @@
         .then(function () { estado.rutinaActual = n; cerrarHoja(); aviso("Nombre cambiado"); pintar(); }, function (e) { btn.disabled = false; btn.textContent = "Guardar el nombre"; manejarError(e); });
     } });
     var borrarBtn = h("button", { class: "btn peligro", type: "button", text: "Borrar la rutina (" + plural(r.tarjetas.length, "ejercicio", "ejercicios") + ")", onclick: function () {
-      if (!confirm("¿Borrar la rutina «" + r.nombre + "» con sus " + plural(r.tarjetas.length, "tarjeta", "tarjetas") + " y fotos? Tus series registradas no se borran.")) return;
+      if (!confirm("¿Borrar la rutina «" + r.nombre + "»? Tus ejercicios y tus series registradas no se borran.")) return;
       borrarBtn.disabled = true; borrarBtn.textContent = "Borrando…";
       r.tarjetas.reduce(function (p, t) {
         return p.then(function () {
           return api("borrar", { tabla: "rutinas", id: t.id }).then(function () {
             estado.tablas.rutinas = estado.tablas.rutinas.filter(function (x) { return x !== t; });
-            return borrarFotosSueltas([t.foto_a, t.foto_b], null);
+            return borrarFotosSueltas([t.foto_a, t.foto_b]);
           });
         });
-      }, Promise.resolve()).then(function () { guardarCache(); cerrarHoja(); aviso("Rutina borrada"); estado.pantalla = "rutinas"; pintar(); },
+      }, Promise.resolve()).then(function () { guardarCache(); cerrarHoja(); aviso("Rutina borrada"); estado.pantalla = "entreno"; estado.tabEntreno = "rutinas"; pintar(); },
         function (e) { guardarCache(); borrarBtn.disabled = false; manejarError(e); });
     } });
     abrirHoja("Editar rutina", h("div", { style: "display:flex;flex-direction:column;gap:6px" },
       h("label", { for: "f-rutina-renombrar", text: "Nombre de la rutina" }), campo, btn,
       h("p", { class: "ayuda", text: "Para cambiar el orden de los ejercicios, usa las flechas ↑ ↓ de cada tarjeta." }),
       borrarBtn));
-  }
-
-  /** Crear o editar una tarjeta: nombre, fotos A y B (tuyas o de la biblioteca), músculos, peso, series y nota. */
-  function abrirEditorTarjeta(rutina, t) {
-    var nuevo = !t;
-    var nombre = h("input", { id: "f-tar-nombre", type: "text", maxlength: 80, value: t ? t.ejercicio : "", list: "lista-ejercicios", autocomplete: "off", "aria-label": "Nombre del ejercicio" });
-    var opciones = h("datalist", { id: "lista-ejercicios" });
-    var vistos = {};
-    nombresEjercicios().map(function (e) { return e.nombre; }).concat(BIBLIOTECA.filter(function (e) { return !e.oculto; }).map(function (e) { return e.n; })).forEach(function (n) {
-      var k = sinTildes(n); if (vistos[k]) return; vistos[k] = true; opciones.appendChild(h("option", { value: n }));
-    });
-    var sugerencia = h("div", { class: "sug", "aria-live": "polite" });
-    // Fotos: { id } (ya guardada), { datos } (recién subida) o null
-    var fotos = { a: t && t.foto_a ? { id: t.foto_a } : null, b: t && t.foto_b ? { id: t.foto_b } : null };
-    var ranuras = h("div", { class: "subir" });
-    var musc = {};
-    var elegidos = musculosElegidos(t);
-    if (elegidos) { elegidos.p.forEach(function (g) { musc[g] = 2; }); elegidos.s.forEach(function (g) { if (!musc[g]) musc[g] = 1; }); }
-    var tocoMusculos = !!elegidos;
-    var chipsMusc = h("div", { class: "chips chips-musc", role: "group", "aria-label": "Músculos que trabaja" });
-    var peso = h("input", { id: "f-tar-peso", type: "number", inputmode: "decimal", min: 0, max: 1000, step: "0.5", value: t && !vacio(t.peso_kg) ? t.peso_kg : "", "aria-label": "Peso en kg" });
-    var series = h("input", { id: "f-tar-series", type: "number", inputmode: "numeric", min: 1, max: 50, value: t && t.series ? t.series : "", "aria-label": "Series" });
-    var reps = h("input", { id: "f-tar-reps", type: "number", inputmode: "numeric", min: 1, max: 1000, value: t && t.repeticiones ? t.repeticiones : "", "aria-label": "Repeticiones" });
-    var nota = h("input", { id: "f-tar-nota", type: "text", maxlength: 200, value: t && t.nota ? t.nota : "", placeholder: "Por ejemplo: asiento en el 4", "aria-label": "Nota" });
-
-    function pintarRanuras() {
-      ranuras.textContent = "";
-      var propias = fotos.a || fotos.b, inf = infoEjercicio(nombre.value);
-      ["a", "b"].forEach(function (lado, k) {
-        var f = fotos[lado], caja = h("div", { class: "slot" + (f ? " lleno" : "") });
-        if (f) caja.appendChild(f.datos ? h("img", { src: f.datos, alt: "Foto " + lado.toUpperCase() }) : imgSubida(f.id, "Foto " + lado.toUpperCase()));
-        else if (!propias && inf.foto) { caja.classList.add("biblio"); caja.appendChild(h("img", { src: FOTOS_EJ + inf.foto + "/" + k + ".jpg", alt: "Foto de la biblioteca " + lado.toUpperCase() })); }
-        else caja.appendChild(h("span", { text: "Sin foto " + lado.toUpperCase() }));
-        caja.appendChild(h("span", { class: "ab", text: lado.toUpperCase() }));
-        ranuras.appendChild(caja);
-      });
-      nota2.textContent = propias ? "Fotos tuyas." : inf.foto ? "Por ahora, las fotos de la biblioteca. Sube las tuyas si quieres otras." : "Sin fotos: sube las tuyas.";
-    }
-    var nota2 = h("p", { class: "ayuda" });
-    function selector(etiqueta, partes, destino) {
-      var input = h("input", { type: "file", accept: "image/*", class: "oculto-archivo", "aria-label": etiqueta });
-      input.addEventListener("change", function () {
-        var f = input.files && input.files[0]; if (!f) return;
-        prepararImagen(f, partes).then(function (res) {
-          if (partes === 2) { fotos.a = { datos: res[0] }; fotos.b = { datos: res[1] }; }
-          else fotos[destino] = { datos: res[0] };
-          input.value = ""; pintarRanuras();
-        }, function (e) { input.value = ""; aviso(e.message, true); });
-      });
-      return h("label", { class: "chip-subir" }, input, etiqueta);
-    }
-    function pintarMusculos() {
-      chipsMusc.textContent = "";
-      Object.keys(GRUPOS).forEach(function (g) {
-        var n = musc[g] || 0;
-        chipsMusc.appendChild(h("button", { type: "button", class: n === 2 ? "p" : n === 1 ? "s" : "", "aria-pressed": n ? "true" : "false",
-          "aria-label": GRUPOS[g] + (n === 2 ? " (principal)" : n === 1 ? " (también)" : ""), text: GRUPOS[g],
-          onclick: function () { musc[g] = n === 0 ? 2 : n === 2 ? 1 : 0; tocoMusculos = true; pintarMusculos(); } }));
-      });
-    }
-    function alCambiarNombre() {
-      var f = fichaDe(nombre.value);
-      if (!nombre.value.trim()) sugerencia.textContent = "";
-      else if (f) sugerencia.textContent = "✓ Está en la biblioteca (" + f.n + "): " + (tocoMusculos ? "fotos y «Cómo se hace» listos." : "músculos llenados solos.");
-      else sugerencia.textContent = "No está en la biblioteca: marca tú los músculos y sube tus fotos.";
-      if (!tocoMusculos) {
-        musc = {};
-        if (f) { f.s.forEach(function (g) { musc[g] = 1; }); f.p.forEach(function (g) { musc[g] = 2; }); }
-        pintarMusculos();
-      }
-      if (nuevo && !peso.dataset.tocado) {
-        var u = ultimoRegistro(nombre.value);
-        peso.value = u && u.max ? u.max : "";
-        if (u && !series.value) series.value = u.series.length;
-        if (u && !reps.value) reps.value = mejorSerie(u).repeticiones || "";
-      }
-      pintarRanuras();
-    }
-    nombre.addEventListener("input", alCambiarNombre);
-    peso.addEventListener("input", function () { peso.dataset.tocado = "1"; });
-
-    var guardar = h("button", { class: "btn lima", type: "button", text: "Guardar tarjeta", onclick: function () {
-      var n = nombre.value.trim();
-      if (!n) return aviso("Escribe el nombre del ejercicio.", true);
-      var num = function (el, min, max, ent, txt) {
-        if (el.value === "") return null;
-        var v = Number(String(el.value).replace(",", "."));
-        if (!isFinite(v) || v < min || v > max || (ent && Math.floor(v) !== v)) throw new Error(txt);
-        return v;
-      };
-      var fila;
-      try {
-        fila = { peso_kg: num(peso, 0, 1000, false, "Revisa el peso (0 a 1000 kg)."), series: num(series, 1, 50, true, "Revisa las series (1 a 50)."), repeticiones: num(reps, 1, 1000, true, "Revisa las repeticiones.") };
-      } catch (e) { return aviso(e.message, true); }
-      var orden = t ? t.orden : rutinaPorNombre(rutina).tarjetas.reduce(function (m, x) { return Math.max(m, Number(x.orden) || 0); }, 0) + 1;
-      var pr = Object.keys(musc).filter(function (g) { return musc[g] === 2; }).sort(), se = Object.keys(musc).filter(function (g) { return musc[g] === 1; }).sort();
-      var fi = fichaDe(n), igual = fi && pr.join() === fi.p.slice().sort().join() && se.join() === fi.s.filter(function (g) { return fi.p.indexOf(g) < 0; }).sort().join();
-      Object.assign(fila, { rutina: t ? t.rutina : rutina, orden: orden, ejercicio: n, nota: nota.value.trim() || null,
-        principales: igual ? null : pr.join(",") || null, secundarios: igual ? null : se.join(",") || null });
-      guardar.disabled = true; guardar.textContent = "Subiendo fotos…";
-      var viejas = t ? [t.foto_a, t.foto_b] : [];
-      var subir = function (lado) {
-        var f = fotos[lado];
-        if (!f) return Promise.resolve(null);
-        if (f.id) return Promise.resolve(f.id);
-        return api("subirFoto", { imagen: f.datos }).then(function (r) { guardarFotoLocal(r.id, f.datos); f.id = r.id; delete f.datos; return r.id; });
-      };
-      subir("a").then(function (a) { fila.foto_a = a; return subir("b"); }).then(function (b) {
-        fila.foto_b = b;
-        guardar.textContent = "Guardando…";
-        if (t) return actualizarTarjeta(t, fila);
-        return api("agregar", { tabla: "rutinas", fila: fila }).then(function (r) {
-          estado.tablas.rutinas.push(Object.assign({ id: r.id, creado_en: new Date().toISOString() }, fila)); guardarCache();
-        });
-      }).then(function () {
-        var sueltas = viejas.filter(function (id) { return id && id !== fila.foto_a && id !== fila.foto_b; });
-        cerrarHoja(); aviso(t ? "Tarjeta guardada" : "Ejercicio agregado a «" + fila.rutina + "»"); pintar();
-        return borrarFotosSueltas(sueltas, null);
-      }, function (e) { guardar.disabled = false; guardar.textContent = "Guardar tarjeta"; manejarError(e); });
-    } });
-    var borrar = t ? h("button", { class: "btn peligro", type: "button", text: "Quitar de la rutina", onclick: function () {
-      if (!confirm("¿Quitar «" + t.ejercicio + "» de la rutina? Tus series registradas no se borran.")) return;
-      borrar.disabled = true;
-      api("borrar", { tabla: "rutinas", id: t.id }).then(function () {
-        estado.tablas.rutinas = estado.tablas.rutinas.filter(function (x) { return x !== t; }); guardarCache();
-        cerrarHoja(); aviso("Ejercicio quitado"); pintar();
-        return borrarFotosSueltas([t.foto_a, t.foto_b], null);
-      }, function (e) { borrar.disabled = false; manejarError(e); });
-    } }) : null;
-
-    abrirHoja(t ? "Editar tarjeta" : "Nuevo ejercicio · " + rutina, h("div", { class: "editor-tar" },
-      h("label", { for: "f-tar-nombre", text: "Nombre (como en Smart Fit)" }), nombre, opciones, sugerencia,
-      h("label", { text: "Fotos" }), ranuras,
-      h("div", { class: "chips-subir" },
-        selector("📷 Subir A y B juntas", 2), selector("📷 Subir A", 1, "a"), selector("📷 Subir B", 1, "b"),
-        h("button", { type: "button", class: "chip-subir", text: "📚 Usar la de la biblioteca", onclick: function () { fotos.a = null; fotos.b = null; pintarRanuras(); } })),
-      nota2,
-      h("p", { class: "ayuda", text: "Sirve una captura de pantalla o una foto de tu galería. Si subes una sola con las dos posiciones lado a lado (como las de tus notas), la app la parte en A y B. Si trae más cosas, recórtala antes en tu galería." }),
-      h("label", { text: "Qué trabaja · toca una vez = principal, otra vez = también, otra = quitar" }), chipsMusc,
-      h("div", { class: "fila3" },
-        h("div", {}, h("label", { for: "f-tar-peso", text: "Peso (kg)" }), peso),
-        h("div", {}, h("label", { for: "f-tar-series", text: "Series" }), series),
-        h("div", {}, h("label", { for: "f-tar-reps", text: "Reps" }), reps)),
-      h("label", { for: "f-tar-nota", text: "Nota (opcional)" }), nota,
-      guardar, borrar));
-    alCambiarNombre();
-    if (t) sugerencia.textContent = "";
   }
 
   /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */
@@ -2416,6 +2602,15 @@
   }
   /** Cambia el nombre de un ejercicio en TODAS sus series guardadas (agrega la serie con el nombre nuevo y borra la vieja). */
   function renombrarEjercicio(viejo, nuevo, boton) {
+    if (estado.version >= 5) {
+      var n = estado.tablas.series_gym.filter(function (s) { return claveEj(s.ejercicio) === claveEj(viejo); }).length;
+      boton.disabled = true; boton.textContent = "Cambiando…";
+      return renombrarEnServicio(viejo, nuevo).then(function () {
+        guardarCache(); cerrarHoja();
+        aviso("Listo: " + plural(n, "serie cambiada", "series cambiadas") + " a «" + nuevo + "»");
+        cargar();
+      }).catch(function (e) { boton.disabled = false; manejarError(e); });
+    }
     var k = sinTildes(viejo);
     var lista = estado.tablas.series_gym.filter(function (s) { return sinTildes(s.ejercicio) === k && s.id; });
     var total = lista.length, hechos = 0, fallos = 0, parar = null;
@@ -2539,7 +2734,7 @@
       }))));
   }
 
-  // ---------- Ejercicios y fotos (Ajustes) ----------
+  // ---------- Fotos de la biblioteca (Free Exercise DB) ----------
   var BD_EJ = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json";
   var MUSC_EN = { chest: "pecho", lats: "espalda", "middle back": "espalda", "lower back": "espalda", traps: "espalda", shoulders: "hombros", biceps: "biceps", triceps: "triceps",
     forearms: "antebrazo", abdominals: "abdomen", quadriceps: "cuadriceps", hamstrings: "femorales", glutes: "gluteos", adductors: "aductores", abductors: "gluteos", calves: "pantorrillas", neck: "hombros" };
@@ -2565,30 +2760,8 @@
     return Object.keys(cuenta).map(function (k) { return cuenta[k]; }).sort(function (a, b) { return a.nombre < b.nombre ? -1 : 1; });
   }
 
-  function abrirEjerciciosFotos() {
-    var personal = leerPersonal(), lista = nombresEjercicios();
-    abrirHoja("Ejercicios y fotos", h("div", { style: "display:flex;flex-direction:column;gap:8px" },
-      h("p", { class: "ayuda", text: "Aquí corriges el nombre de un ejercicio o eliges otra foto. Toca un ejercicio." }),
-      lista.length ? h("div", { class: "lista" }, lista.map(function (e) {
-        var inf = infoEjercicio(e.nombre), propia = !!personal[sinTildes(e.nombre)];
-        var mini = h("span", { class: "emo mini-foto" });
-        if (inf.foto) mini.appendChild(h("img", { src: FOTOS_EJ + inf.foto + "/0.jpg", alt: "", loading: "lazy" })); else mini.textContent = "🏋️";
-        return h("button", { class: "item con-emo", onclick: function () { abrirEditorEjercicio(e.nombre); } }, mini,
-          h("div", { class: "t" }, h("b", { text: e.nombre }), h("span", { text: plural(e.n, "serie", "series") + (propia ? " · foto elegida por ti" : inf.foto ? "" : " · sin foto") })));
-      })) : h("div", { class: "vacio", text: "Aún no hay ejercicios de gym registrados." })));
-  }
-
-  function abrirEditorEjercicio(nombre) {
-    var k = sinTildes(nombre), personal = leerPersonal(), inf = infoEjercicio(nombre);
-    var cuantas = estado.tablas.series_gym.filter(function (s) { return sinTildes(s.ejercicio) === k; }).length;
-    var campoNombre = h("input", { id: "f-nuevo-nombre", type: "text", value: nombre, maxlength: 80, "aria-label": "Nombre del ejercicio" });
-    var btnNombre = h("button", { class: "btn lima", type: "button", text: "Guardar el nombre en " + plural(cuantas, "serie", "series"), onclick: function () {
-      var nuevo = campoNombre.value.trim();
-      if (!nuevo || nuevo === nombre) return aviso("Escribe un nombre distinto.", true);
-      if (!confirm("¿Cambiar «" + nombre + "» por «" + nuevo + "» en " + plural(cuantas, "serie", "series") + " de todas las fechas?")) return;
-      renombrarEjercicio(nombre, nuevo, btnNombre);
-    } });
-    var foto = fotoEjercicio(inf, nombre);
+  /** Buscador de las ~800 fotos de la biblioteca (Free Exercise DB), dentro del editor del ejercicio. */
+  function elegirFotoBD(alElegir) {
     var resultados = h("div", { class: "grid-fotos", "aria-live": "polite" });
     var buscar = h("input", { id: "f-buscar-foto", type: "search", placeholder: "Busca (por ejemplo: crunch, fly, press, machine)", "aria-label": "Buscar foto" });
     var estadoBD = h("p", { class: "ayuda", text: "" });
@@ -2603,13 +2776,6 @@
         chipsEquipo.appendChild(h("button", { type: "button", class: q[0] === filtro.equipo ? "on" : "", text: q[1], onclick: function () { filtro.equipo = q[0]; pintarChips(); mostrar(); } }));
       });
     }
-    function elegir(e) {
-      var pr = [], se = [];
-      (e.primaryMuscles || []).forEach(function (m) { if (MUSC_EN[m] && pr.indexOf(MUSC_EN[m]) < 0) pr.push(MUSC_EN[m]); });
-      (e.secondaryMuscles || []).forEach(function (m) { if (MUSC_EN[m] && pr.indexOf(MUSC_EN[m]) < 0 && se.indexOf(MUSC_EN[m]) < 0) se.push(MUSC_EN[m]); });
-      var p = leerPersonal(); p[k] = { foto: e.id, principales: pr, secundarios: se }; guardarPersonal(p);
-      cerrarHoja(); aviso("Foto elegida para «" + nombre + "»"); pintar();
-    }
     function mostrar() {
       resultados.textContent = "";
       if (!bdEjercicios) return;
@@ -2622,26 +2788,21 @@
       });
       if (!hallados.length) { resultados.appendChild(h("p", { class: "ayuda", text: "No encontré nada. Prueba con otra palabra o quita un filtro." })); return; }
       hallados.slice(0, 60).forEach(function (e) {
-        resultados.appendChild(h("button", { type: "button", class: "foto-op", "aria-label": "Usar la foto de " + e.name, onclick: function () { elegir(e); } },
+        resultados.appendChild(h("button", { type: "button", class: "foto-op", "aria-label": "Usar la foto de " + e.name, onclick: function () { alElegir(e); } },
           h("img", { src: FOTOS_EJ + e.images[0], alt: "", loading: "lazy" }), h("span", { text: e.name })));
       });
       if (hallados.length > 60) resultados.appendChild(h("p", { class: "ayuda", text: "Hay " + hallados.length + " resultados; se muestran 60. Afina la búsqueda." }));
     }
     buscar.addEventListener("input", mostrar);
-    pintarChips();
-    estadoBD.textContent = "Cargando fotos…";
-    cargarBD().then(function () { estadoBD.textContent = "Toca la foto que sí es:"; mostrar(); }, function () { estadoBD.textContent = "No pude cargar las fotos. Revisa tu internet e inténtalo otra vez."; });
-    var quitar = personal[k] ? h("button", { class: "btn sec", type: "button", text: "Quitar la foto que elegí (volver a la automática)", onclick: function () {
-      var p = leerPersonal(); delete p[k]; guardarPersonal(p); cerrarHoja(); aviso("Listo, vuelve la foto automática"); pintar();
-    } }) : null;
-    abrirHoja(nombre, h("div", { style: "display:flex;flex-direction:column;gap:8px" },
-      h("div", { class: "ej-cab" }, foto, h("div", {}, h("div", { class: "ej-m", text: nombresGrupos(inf.principales.concat(inf.secundarios)) || "Sin músculos definidos" }),
-        h("div", { class: "nota", text: personal[k] ? "Foto elegida por ti" : inf.foto ? "Foto automática" : "Sin foto" }))),
-      h("h4", { text: "Nombre" }),
-      h("p", { class: "ayuda", text: "Escribe el nombre como aparece en Smart Fit. Se cambia en todas las fechas." }),
-      campoNombre, btnNombre,
-      h("h4", { text: "Foto" }),
-      buscar, h("details", { class: "avanzado" }, h("summary", { text: "Filtrar por músculo o equipo" }), chipsGrupo, chipsEquipo), estadoBD, resultados, quitar));
+    var caja = h("div", { class: "graf buscador-bd" }, h("p", { class: "ayuda", text: "Las fotos de la biblioteca tienen nombres en inglés; puedes buscar en español (remo, polea, máquina…)." }), buscar, chipsGrupo, chipsEquipo, estadoBD, resultados);
+    var cargada = false;
+    caja.abrir = function () {
+      if (cargada) return;
+      cargada = true; pintarChips(); estadoBD.textContent = "Cargando fotos…";
+      cargarBD().then(function () { estadoBD.textContent = "Toca la foto que sí es:"; mostrar(); }, function () { cargada = false; estadoBD.textContent = "No pude cargar las fotos. Revisa tu internet e inténtalo otra vez."; });
+      setTimeout(function () { buscar.focus(); }, 50);
+    };
+    return caja;
   }
 
   // ---------- Ajustes ----------
@@ -2706,7 +2867,6 @@
       lineas(pares),
       h("p", { class: "ayuda", text: "Se cambian en la pestaña «metas» de tu hoja de Google." }),
       h("button", { class: "btn sec", text: "Actualizar datos", onclick: function () { if (estado.version < 2) estado.version = null; cerrarHoja(); cargar(); } }),
-      estado.tablas ? h("button", { class: "btn sec", text: "Ejercicios y fotos", onclick: function () { cerrarHoja(); abrirEjerciciosFotos(); } }) : null,
       estado.tablas ? h("button", { class: "btn sec", text: "Buscar registros repetidos", onclick: function () { cerrarHoja(); abrirRepetidos(); } }) : null,
       h("button", { class: "btn peligro", text: "Olvidar contraseña en este dispositivo", onclick: function () { borrarLocal("token"); olvidarDatos(); tokenMemoria = ""; cerrarHoja(); pantallaEntrada(""); } }),
       avanzado

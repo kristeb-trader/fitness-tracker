@@ -19,13 +19,13 @@ console.log('Instalación y contraseña');
   s.ctx.setup();
   s.ctx.setup();
 
-  prueba('setup crea las 7 pestañas con sus encabezados', () => {
-    assert.deepStrictEqual(Object.keys(s.hojas).sort(), ['comidas', 'ejercicio', 'fotos', 'medidas', 'metas', 'rutinas', 'series_gym']);
+  prueba('setup crea las 8 pestañas con sus encabezados', () => {
+    assert.deepStrictEqual(Object.keys(s.hojas).sort(), ['comidas', 'ejercicio', 'ejercicios', 'fotos', 'medidas', 'metas', 'rutinas', 'series_gym']);
     assert.strictEqual(json(s.hojas.comidas.filas[0]), json(['id', 'fecha', 'hora', 'tipo_comida', 'descripcion', 'kcal', 'proteina_g', 'carbos_g', 'grasa_g', 'estimado', 'creado_en']));
   });
   prueba('setup se puede repetir sin duplicar las metas', () => assert.strictEqual(s.hojas.metas.getLastRow(), 6));
   prueba('la dirección del servicio responde con su versión', () => {
-    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 4);
+    assert.strictEqual(JSON.parse(s.ctx.doGet().text).version, 5);
   });
   prueba('sin contraseña, con una incorrecta o con una corta: no autorizado', () => {
     assert.strictEqual(s.post({ accion: 'ping' }).error, 'No autorizado');
@@ -35,7 +35,7 @@ console.log('Instalación y contraseña');
   });
   prueba('ping devuelve la versión y si el chat con API está activo', () => {
     const r = s.post({ token: T, accion: 'ping' });
-    assert.ok(r.ok); assert.strictEqual(r.version, 4); assert.strictEqual(r.chat, false);
+    assert.ok(r.ok); assert.strictEqual(r.version, 5); assert.strictEqual(r.chat, false);
   });
   prueba('espacios sobrantes en la contraseña guardada o escrita no importan', () => {
     const e = crearServicio({ props: { TOKEN: '  clave-con-espacios-123  \n' } });
@@ -150,6 +150,7 @@ console.log('Mis rutinas y fotos (versión 4)');
     const l = post({ accion: 'leer' }).rutinas;
     assert.strictEqual(l.length, 1); assert.strictEqual(l[0].id, idTarjeta); assert.strictEqual(l[0].peso_kg, 42.5); assert.strictEqual(l[0].foto_a, null);
     assert.strictEqual(post({ accion: 'actualizar', tabla: 'comidas', id: 'x', fila: {} }).error, 'Tabla no permitida');
+    assert.strictEqual(post({ accion: 'actualizar', tabla: 'series_gym', id: 'x', fila: {} }).error, 'Tabla no permitida');
     assert.ok(post({ accion: 'actualizar', tabla: 'rutinas', id: 'x', fila: { rutina: 'a', ejercicio: 'b' } }).error.includes('No se encontró'));
   });
   prueba('borrar la foto quita todos sus pedazos; borrar la tarjeta también funciona', () => {
@@ -160,6 +161,42 @@ console.log('Mis rutinas y fotos (versión 4)');
   });
   prueba('las fotos no pueden escribirse con agregar', () => {
     assert.strictEqual(post({ accion: 'agregar', tabla: 'fotos', fila: { id: 'x', datos: 'y' } }).error, 'Tabla no permitida');
+  });
+}
+
+// ---------------------------------------------------------------------------
+console.log('Mis ejercicios y cambiar nombres (versión 5)');
+{
+  const s = crearServicio();
+  const T = s.props.TOKEN;
+  s.ctx.setup();
+  delete s.hojas.ejercicios;
+  const post = (o) => s.post(Object.assign({ token: T }, o));
+  let id;
+  prueba('leer crea sola la pestaña «ejercicios»', () => {
+    assert.deepStrictEqual(post({ accion: 'leer' }).ejercicios, []);
+    assert.ok(s.hojas.ejercicios.filas[0].includes('pasos'));
+  });
+  prueba('guarda un ejercicio con pasos largos y lo actualiza sin cambiarle el id', () => {
+    const pasos = 'Paso uno muy detallado. '.repeat(60);
+    const r = post({ accion: 'agregar', tabla: 'ejercicios', fila: { nombre: 'Press banca plano', foto_a: 'f1', principales: 'pecho', equipo: 'barra', pasos } });
+    assert.ok(r.ok, json(r)); id = r.id;
+    assert.strictEqual(post({ accion: 'leer' }).ejercicios[0].pasos, pasos.trim(), 'no se corta en 500 letras');
+    assert.ok(post({ accion: 'actualizar', tabla: 'ejercicios', id, fila: { nombre: 'Press banca plano', foto_a: 'f2' } }).ok);
+    const e = post({ accion: 'leer' }).ejercicios;
+    assert.strictEqual(e.length, 1); assert.strictEqual(e[0].id, id); assert.strictEqual(e[0].foto_a, 'f2');
+  });
+  prueba('renombrar cambia el nombre en series, rutinas y ejercicios (sin importar tildes ni mayúsculas)', () => {
+    post({ accion: 'agregar', tabla: 'series_gym', fila: { fecha: '2026-11-10', rutina: 'Pecho', ejercicio: 'press banca plano', numero_serie: 1, peso_kg: 40, repeticiones: 10 } });
+    post({ accion: 'agregar', tabla: 'series_gym', fila: { fecha: '2026-11-10', rutina: 'Pecho', ejercicio: 'Otra cosa', numero_serie: 1, peso_kg: 10, repeticiones: 10 } });
+    post({ accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Pecho', ejercicio: 'Press Banca Plano', peso_kg: 40 } });
+    const r = post({ accion: 'renombrar', viejo: 'Press banca plano', nuevo: 'Press de banca plano' });
+    assert.ok(r.ok, json(r));
+    assert.deepStrictEqual(json(r.cambiados), json({ series_gym: 1, rutinas: 1, ejercicios: 1 }));
+    const l = post({ accion: 'leer' });
+    assert.deepStrictEqual(l.series_gym.map((x) => x.ejercicio).sort(), ['Otra cosa', 'Press de banca plano']);
+    assert.strictEqual(l.rutinas[0].ejercicio, 'Press de banca plano'); assert.strictEqual(l.ejercicios[0].nombre, 'Press de banca plano');
+    assert.ok(post({ accion: 'renombrar', viejo: 'x', nuevo: '' }).error.includes('Falta'));
   });
 }
 
@@ -210,7 +247,7 @@ console.log('Leer datos que ya estaban en la hoja (lo que antes no aparecía)');
     s.ctx.probar();
     assert.strictEqual(json(s.hojas.comidas.filas), antes);
     assert.ok(s.estado.registros.some((l) => /comidas: 5 filas/.test(l)), s.estado.registros.join(' | '));
-    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 4/.test(l)));
+    assert.ok(s.estado.registros.some((l) => /Versión del servicio: 5/.test(l)));
   });
 }
 

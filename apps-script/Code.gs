@@ -10,7 +10,7 @@
  * La contraseña NO está en este archivo ni en el repositorio.
  */
 
-var VERSION = 4;
+var VERSION = 5;
 
 var TABLAS = {
   comidas: [
@@ -94,6 +94,20 @@ var TABLAS = {
     { c: 'foto_b', t: 'texto' },
     { c: 'creado_en', t: 'ts' }
   ],
+  // Mis ejercicios: cómo es cada ejercicio (fotos, músculos, equipo, cómo hacerlo). Versión 5.
+  // La rutina solo guarda qué ejercicio va y con qué peso, series y repeticiones.
+  ejercicios: [
+    { c: 'id', t: 'id' },
+    { c: 'nombre', t: 'texto', req: true },
+    { c: 'foto_a', t: 'texto' },
+    { c: 'foto_b', t: 'texto' },
+    { c: 'principales', t: 'texto' },
+    { c: 'secundarios', t: 'texto' },
+    { c: 'equipo', t: 'texto' },
+    { c: 'pasos', t: 'texto', largo: 3000 },
+    { c: 'nota', t: 'texto' },
+    { c: 'creado_en', t: 'ts' }
+  ],
   // Fotos que subes para tus tarjetas, en pedazos (una celda guarda hasta 50.000 letras). Versión 4.
   fotos: [
     { c: 'id', t: 'texto' },
@@ -106,7 +120,7 @@ var TABLAS = {
   ]
 };
 
-var EDITABLES = { comidas: true, ejercicio: true, series_gym: true, rutinas: true };
+var EDITABLES = { comidas: true, ejercicio: true, series_gym: true, rutinas: true, ejercicios: true };
 
 var METAS_INICIALES = [
   ['proteina_min_g', 130],
@@ -170,6 +184,7 @@ function doPost(e) {
       case 'actualizar': return salida(conBloqueo(function () { return actualizar(pedido.tabla, pedido.id, pedido.fila); }));
       case 'subirFoto': return salida(conBloqueo(function () { return subirFoto(pedido.imagen); }));
       case 'fotos': return salida({ ok: true, fotos: leerFotos(pedido.ids) });
+      case 'renombrar': return salida(conBloqueo(function () { return renombrarEjercicio(pedido.viejo, pedido.nuevo); }));
       case 'borrarFoto': return salida(conBloqueo(function () { return borrarFoto(pedido.id); }));
       case 'chat': return salida(chat(pedido));
       default: return salida({ ok: false, error: 'Acción desconocida' });
@@ -209,7 +224,7 @@ function hoja(nombre) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var h = ss.getSheetByName(nombre);
   // Las pestañas nuevas (rutinas y fotos) se crean solas la primera vez
-  if (!h && (nombre === 'rutinas' || nombre === 'fotos')) {
+  if (!h && (nombre === 'rutinas' || nombre === 'fotos' || nombre === 'ejercicios')) {
     h = ss.insertSheet(nombre);
     asegurarEncabezados(h, nombre);
     h.setFrozenRows(1);
@@ -356,7 +371,7 @@ function validar(nombre, fila) {
     } else if (k.t === 'bool') {
       v = v === true || /^(true|verdadero|s[ií]|1|yes)$/i.test(String(v));
     } else {
-      v = String(v).slice(0, 500);
+      v = String(v).slice(0, k.largo || 500);
       if (k.op) {
         v = v.toLowerCase();
         if (k.op.indexOf(v) < 0) throw new Error(k.c + ' no es válido (usa: ' + k.op.join(', ') + ')');
@@ -387,7 +402,8 @@ function leerTodo(desde) {
     comidas: filtrar(leer('comidas')),
     ejercicio: filtrar(leer('ejercicio')),
     series_gym: filtrar(leer('series_gym')),
-    rutinas: leer('rutinas')
+    rutinas: leer('rutinas'),
+    ejercicios: leer('ejercicios')
   };
 }
 
@@ -432,7 +448,7 @@ function borrar(nombre, id) {
 
 /** Cambia una tarjeta de una rutina sin cambiarle el id. */
 function actualizar(nombre, id, datos) {
-  if (nombre !== 'rutinas') throw new Error('Tabla no permitida');
+  if (nombre !== 'rutinas' && nombre !== 'ejercicios') throw new Error('Tabla no permitida');
   var obj = validar(nombre, datos);
   var h = hoja(nombre);
   var enc = asegurarEncabezados(h, nombre);
@@ -446,6 +462,27 @@ function actualizar(nombre, id, datos) {
     }
   }
   throw new Error('No se encontró el registro');
+}
+
+function sinTildes(t) { return String(t === null || t === undefined ? '' : t).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+
+/** Cambia el nombre de un ejercicio en todas las fechas (series), en las rutinas y en «mis ejercicios». */
+function renombrarEjercicio(viejo, nuevo) {
+  nuevo = String(nuevo || '').trim().slice(0, 500);
+  if (!sinTildes(viejo) || !nuevo) throw new Error('Falta el nombre');
+  var cuenta = {};
+  [['series_gym', 'ejercicio'], ['rutinas', 'ejercicio'], ['ejercicios', 'nombre']].forEach(function (p) {
+    var h = hoja(p[0]);
+    var valores = h.getDataRange().getValues();
+    if (!valores.length) return;
+    var ci = valores[0].map(function (x) { return String(x).trim(); }).indexOf(p[1]);
+    var n = 0;
+    if (ci >= 0) for (var r = 1; r < valores.length; r++) {
+      if (sinTildes(valores[r][ci]) === sinTildes(viejo)) { h.getRange(r + 1, ci + 1).setValue(nuevo); n++; }
+    }
+    cuenta[p[0]] = n;
+  });
+  return { ok: true, cambiados: cuenta };
 }
 
 var PEDAZO_FOTO = 45000;

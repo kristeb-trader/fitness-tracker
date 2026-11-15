@@ -452,3 +452,20 @@ img.sin-foto { visibility: hidden; }
 .chips-musc button.p { background: var(--verde2); color: #fff; border-color: var(--verde2); }
 .chips-musc button.s { background: var(--lime-soft); color: var(--lime-ink); border-color: #CFE7B3; }
 .fila3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* Entreno en pestañas y Mis ejercicios */
+.seg.tres { grid-template-columns: repeat(3, 1fr); }
+.seg.dos { grid-template-columns: repeat(2, 1fr); margin-top: 2px; }
+.tag.aviso { background: #FFF1C7; color: #8A5A00; }
+.crear-ej { margin-top: 2px; }
+.editar-ej { margin-top: 0; }
+.ficha-nota { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+.ayuda.centro { text-align: center; }
+.editor-tar textarea { min-height: 96px; resize: vertical; }
+.buscador-bd { gap: 6px; margin-top: 6px; }
+.elegir-lista { display: flex; flex-direction: column; gap: 6px; max-height: 42vh; overflow-y: auto; padding: 2px; }
+.elegir-op { display: grid; grid-template-columns: 72px minmax(0, 1fr) 22px; gap: 10px; align-items: center; width: 100%; border: 2px solid transparent; text-align: left; background: #fff; border-radius: 16px; padding: 6px; box-shadow: var(--sombra); }
+.elegir-op.sel { border-color: var(--verde); background: #F4FBEC; }
+.elegir-foto { width: 72px; height: 54px; border-radius: 12px; overflow: hidden; background: #EEF1EB; display: grid; place-items: center; font-size: 22px; }
+.elegir-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.elegir-ok { font-weight: 900; color: var(--verde2); font-size: 18px; text-align: center; }
