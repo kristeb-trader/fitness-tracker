@@ -1493,8 +1493,16 @@
     var k = sinTildes(n).trim();
     return rutinasAgrupadas().filter(function (r) { return sinTildes(r.nombre) === k; })[0] || { nombre: n, tarjetas: [] };
   }
+  /** Músculos que elegiste tú para la tarjeta (null = los de la biblioteca, que se actualizan solos). */
+  function musculosElegidos(t) {
+    if (!t || (!t.principales && !t.secundarios)) return null;
+    // Arreglo: hasta el 15 nov la biblioteca confundía «abdominales … banco declinado» con el press declinado
+    // y llenaba Pecho / Tríceps solos. Esa combinación en un ejercicio de abdominales se ignora.
+    if (t.principales === "pecho" && t.secundarios === "triceps" && /abdomin|crunch/.test(sinTildes(t.ejercicio))) return null;
+    return { p: listaGrupos(t.principales), s: listaGrupos(t.secundarios) };
+  }
   function musculosTarjeta(t) {
-    var p = listaGrupos(t.principales), s = listaGrupos(t.secundarios);
+    var el = musculosElegidos(t), p = el ? el.p : [], s = el ? el.s : [];
     if (!p.length && !s.length) { var inf = infoEjercicio(t.ejercicio); p = inf.principales; s = inf.secundarios; }
     return { p: p, s: s.filter(function (g) { return p.indexOf(g) < 0; }) };
   }
@@ -1690,8 +1698,9 @@
     var fotos = { a: t && t.foto_a ? { id: t.foto_a } : null, b: t && t.foto_b ? { id: t.foto_b } : null };
     var ranuras = h("div", { class: "subir" });
     var musc = {};
-    if (t) { listaGrupos(t.principales).forEach(function (g) { musc[g] = 2; }); listaGrupos(t.secundarios).forEach(function (g) { if (!musc[g]) musc[g] = 1; }); }
-    var tocoMusculos = !!(t && (t.principales || t.secundarios));
+    var elegidos = musculosElegidos(t);
+    if (elegidos) { elegidos.p.forEach(function (g) { musc[g] = 2; }); elegidos.s.forEach(function (g) { if (!musc[g]) musc[g] = 1; }); }
+    var tocoMusculos = !!elegidos;
     var chipsMusc = h("div", { class: "chips chips-musc", role: "group", "aria-label": "Músculos que trabaja" });
     var peso = h("input", { id: "f-tar-peso", type: "number", inputmode: "decimal", min: 0, max: 1000, step: "0.5", value: t && !vacio(t.peso_kg) ? t.peso_kg : "", "aria-label": "Peso en kg" });
     var series = h("input", { id: "f-tar-series", type: "number", inputmode: "numeric", min: 1, max: 50, value: t && t.series ? t.series : "", "aria-label": "Series" });
@@ -1768,9 +1777,10 @@
         fila = { peso_kg: num(peso, 0, 1000, false, "Revisa el peso (0 a 1000 kg)."), series: num(series, 1, 50, true, "Revisa las series (1 a 50)."), repeticiones: num(reps, 1, 1000, true, "Revisa las repeticiones.") };
       } catch (e) { return aviso(e.message, true); }
       var orden = t ? t.orden : rutinaPorNombre(rutina).tarjetas.reduce(function (m, x) { return Math.max(m, Number(x.orden) || 0); }, 0) + 1;
+      var pr = Object.keys(musc).filter(function (g) { return musc[g] === 2; }).sort(), se = Object.keys(musc).filter(function (g) { return musc[g] === 1; }).sort();
+      var fi = fichaDe(n), igual = fi && pr.join() === fi.p.slice().sort().join() && se.join() === fi.s.filter(function (g) { return fi.p.indexOf(g) < 0; }).sort().join();
       Object.assign(fila, { rutina: t ? t.rutina : rutina, orden: orden, ejercicio: n, nota: nota.value.trim() || null,
-        principales: Object.keys(musc).filter(function (g) { return musc[g] === 2; }).join(",") || null,
-        secundarios: Object.keys(musc).filter(function (g) { return musc[g] === 1; }).join(",") || null });
+        principales: igual ? null : pr.join(",") || null, secundarios: igual ? null : se.join(",") || null });
       guardar.disabled = true; guardar.textContent = "Subiendo fotos…";
       var viejas = t ? [t.foto_a, t.foto_b] : [];
       var subir = function (lado) {

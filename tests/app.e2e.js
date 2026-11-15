@@ -796,7 +796,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const enc = s.hojas.rutinas.filas[0], fila = s.hojas.rutinas.filas[1];
       assert.strictEqual(fila[enc.indexOf('ejercicio')], 'Press banca plano');
       assert.strictEqual(fila[enc.indexOf('peso_kg')], 40); assert.strictEqual(fila[enc.indexOf('repeticiones')], 12);
-      assert.strictEqual(fila[enc.indexOf('principales')], 'pecho');
+      assert.strictEqual(fila[enc.indexOf('principales')], '', 'los músculos sugeridos no se guardan: se toman de la biblioteca');
       assert.ok(fila[enc.indexOf('foto_a')] && fila[enc.indexOf('foto_b')] && fila[enc.indexOf('foto_a')] !== fila[enc.indexOf('foto_b')]);
       assert.ok(s.hojas.fotos.getLastRow() >= 3, 'dos fotos guardadas');
       const t = await page.innerText('.tarjeta-ej');
@@ -866,6 +866,25 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('text=Rutina borrada');
       assert.strictEqual(s.hojas.rutinas.getLastRow(), 1);
       assert.ok((await page.innerText('.app')).includes('Aún no tienes rutinas'));
+    });
+    await prueba('«Abdominales cruzados en banco declinado» trabaja abdomen (aunque se haya guardado Pecho / Tríceps por el error anterior)', async () => {
+      s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Abdomen', orden: 1, ejercicio: 'Abdominales cruzados en banco declinado', principales: 'pecho', secundarios: 'triceps' } });
+      await page.reload();
+      await page.waitForSelector('.hero');
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.btn-rutinas');
+      await page.click('.rut-card');
+      const t = await page.innerText('.tar-trab');
+      assert.ok(t.includes('Abdomen') && !t.includes('Pecho') && !t.includes('Tríceps'), t);
+      assert.ok((await page.getAttribute('.tar-foto img', 'src')).endsWith('Decline_Oblique_Crunch/0.jpg'));
+      await page.click('.tarjeta-ej button:has-text("Cómo se hace")');
+      await page.waitForSelector('dialog .ficha');
+      assert.ok((await page.innerText('dialog')).includes('Oblicuos'));
+      await page.keyboard.press('Escape');
+      await page.click('[aria-label="Editar Abdominales cruzados en banco declinado"]');
+      assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Abdomen"]', 'aria-label'), 'Abdomen (principal)');
+      assert.strictEqual(await page.getAttribute('.chips-musc [aria-label^="Pecho"]', 'aria-label'), 'Pecho');
+      await page.keyboard.press('Escape');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

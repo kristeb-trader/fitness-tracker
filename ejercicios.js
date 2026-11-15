@@ -16,6 +16,16 @@ window.BIBLIOTECA_EJ = [
     pasos: ["Arrodíllate frente a la polea alta y toma la cuerda a los lados de la cabeza.", "Enrolla el torso hacia abajo, llevando los codos hacia los muslos.", "Sube despacio sin soltar la cuerda de la cabeza."],
     tip: "La cadera se queda quieta: solo se dobla el abdomen." },
 
+  // Banco declinado de abdominales: van antes del «press declinado» de pecho
+  { f: "Decline_Oblique_Crunch", n: "Abdominales cruzados en banco declinado", re: /(abdomin|crunch).*(cruzad|oblicu).*(declinad|banco)|(declinad|banco).*(abdomin|crunch).*(cruzad|oblicu)/, p: ["abdomen"], s: [], eq: "peso corporal", niv: "intermedio",
+    t: "Oblicuos · Abdomen", tb: "",
+    pasos: ["Siéntate en el banco declinado con los pies enganchados bajo los rodillos y las manos detrás de la cabeza.", "Baja el torso despacio hasta casi apoyar la espalda, sin soltar la tensión del abdomen.", "Sube girando el torso para llevar un codo hacia la rodilla contraria.", "Baja despacio y en la siguiente repetición gira hacia el otro lado."],
+    tip: "El giro sale del abdomen, no de jalar la cabeza con las manos." },
+  { f: "Decline_Crunch", n: "Abdominales en banco declinado", re: /(abdomin|crunch|sit ?up).*declinad|declinad.*(abdomin|crunch)/, p: ["abdomen"], s: [], eq: "peso corporal", niv: "intermedio",
+    t: "Abdomen", tb: "",
+    pasos: ["Siéntate en el banco declinado con los pies enganchados bajo los rodillos.", "Cruza los brazos sobre el pecho o pon las manos detrás de la cabeza.", "Baja el torso despacio hasta casi apoyar la espalda.", "Sube enrollando el torso hasta quedar casi sentado."],
+    tip: "Más inclinado el banco, más difícil: empieza con poca inclinación." },
+
   // ---- Pierna: nombres de Smart Fit (van antes que los genéricos) ----
   { f: "Calf_Press_On_The_Leg_Press_Machine", n: "Pantorrilla en prensa", re: /pantorrilla.*(prensa|leg press)|(prensa|leg press).*pantorrilla/, p: ["pantorrillas"], s: [], eq: "maquina", niv: "principiante",
     t: "Pantorrillas", tb: "",
@@ -105,7 +115,7 @@ window.BIBLIOTECA_EJ = [
     t: "Pecho (parte alta)", tb: "Hombro frontal · tríceps",
     pasos: ["Acuéstate en la banca inclinada y toma la barra un poco más abierta que los hombros.", "Baja la barra despacio hasta la parte alta del pecho.", "Empuja hacia arriba hasta estirar los brazos."],
     tip: "Pies firmes en el piso y glúteos pegados a la banca." },
-  { f: "Decline_Barbell_Bench_Press", n: "Press declinado", re: /press.*declinad|declinad/, p: ["pecho"], s: ["triceps"], eq: "barra", niv: "intermedio",
+  { f: "Decline_Barbell_Bench_Press", n: "Press declinado", re: /press.*declinad|declinad.*press/, p: ["pecho"], s: ["triceps"], eq: "barra", niv: "intermedio",
     t: "Pecho (parte baja)", tb: "Tríceps",
     pasos: ["Acuéstate en la banca declinada con las piernas aseguradas.", "Baja la barra despacio hasta la parte baja del pecho.", "Empuja hacia arriba hasta estirar los brazos."],
     tip: "Pide ayuda para sacar y guardar la barra." },
