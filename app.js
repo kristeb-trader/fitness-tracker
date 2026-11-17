@@ -1053,9 +1053,10 @@
     FIGURA[lado].forEach(function (p) {
       var g = p[p.length - 1], fill = g ? colorNivel(nivel[g] || 0) : "#D5DCD1";
       var tit = g ? "<title>" + GRUPOS[g] + ": " + fmt(nivel[g] || 0, 1) + " series</title>" : "";
+      var dg = g && nivel[g] ? ' data-g="' + g + '" style="cursor:pointer"' : "";
       if (p[0] === "c") s += '<circle cx="' + p[1] + '" cy="' + p[2] + '" r="' + p[3] + '" fill="' + fill + '"/>';
-      else if (p[0] === "e") s += '<ellipse cx="' + p[1] + '" cy="' + p[2] + '" rx="' + p[3] + '" ry="' + p[4] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5">' + tit + "</ellipse>";
-      else s += '<rect x="' + p[1] + '" y="' + p[2] + '" width="' + p[3] + '" height="' + p[4] + '" rx="' + p[5] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5">' + tit + "</rect>";
+      else if (p[0] === "e") s += '<ellipse cx="' + p[1] + '" cy="' + p[2] + '" rx="' + p[3] + '" ry="' + p[4] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5"' + dg + ">" + tit + "</ellipse>";
+      else s += '<rect x="' + p[1] + '" y="' + p[2] + '" width="' + p[3] + '" height="' + p[4] + '" rx="' + p[5] + '" fill="' + fill + '" stroke="#fff" stroke-width="1.5"' + dg + ">" + tit + "</rect>";
     });
     var t = document.createElement("template");
     t.innerHTML = '<svg viewBox="0 0 120 240" width="112" role="img" aria-label="Músculos trabajados, ' + lado + '">' + s + "</svg>";
@@ -1132,6 +1133,25 @@
         h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleGym(g); } })));
   }
 
+  /** Qué ejercicios trabajaron un músculo en el día o la semana elegidos. */
+  function abrirMusculo(g, aporte, cuando) {
+    var nombres = Object.keys(aporte).sort(function (a, b) { return (aporte[b].p + aporte[b].s / 2) - (aporte[a].p + aporte[a].s / 2); });
+    abrirHoja(GRUPOS[g] + " · " + cuando, h("div", { style: "display:flex;flex-direction:column;gap:10px" },
+      h("p", { class: "ayuda", text: "Estos ejercicios cuentan para " + GRUPOS[g].toLowerCase() + ". Como principal, cada serie suma 1; como «también», suma media." }),
+      nombres.length ? h("div", { class: "lista" }, nombres.map(function (n) {
+        var x = aporte[n], partes = [];
+        if (x.sinSeries) partes.push("estimado por la rutina (sin series registradas)");
+        else {
+          if (x.p) partes.push(plural(x.p, "serie", "series") + " · principal");
+          if (x.s) partes.push(plural(x.s, "serie", "series") + " · también");
+        }
+        var info = x.sinSeries ? { foto: null } : infoEjercicio(n);
+        return h("button", { type: "button", class: "item con-emo", onclick: function () { if (!x.sinSeries) abrirEjercicio(n); } },
+          miniEjercicio(info, "emo mini-foto"),
+          h("div", { class: "t" }, h("b", { text: n }), h("span", { text: partes.join(" · ") })));
+      })) : h("p", { class: "ayuda", text: "Ningún ejercicio." }),
+      h("p", { class: "ayuda", text: "¿Alguno no debería contar aquí? Tócalo → ✎ Editar ejercicio y cambia sus músculos." })));
+  }
   function datoNotas(notas, re) { var m = sinTildes(notas).match(re); return m ? m[1].replace(/\./g, "").replace(",", ".") : null; }
 
   function pintarEntreno() {
@@ -1159,25 +1179,34 @@
     var EMO = { gym: "💪", bici: "🚴", caminata: "🚶" };
 
     // Semana: sesiones, tiempo, kcal y kg levantados
-    var ses = 0, minutos = 0, kcal = 0, kg = 0, nivelSemana = {}, nivelDia = {};
+    var ses = 0, minutos = 0, kcal = 0, kg = 0, nivelSemana = {}, nivelDia = {}, aporteDia = {};
+    // aporte[músculo][ejercicio] = { p: series como principal, s: series como «también» }
+    var sumarAporte = function (ap, g, nombre, campo, n) { var a = (ap[g] = ap[g] || {}); var x = (a[nombre] = a[nombre] || { p: 0, s: 0, sinSeries: false }); x[campo] += n; return x; };
     var elegido = dias.indexOf(estado.diaEntreno) >= 0 ? estado.diaEntreno : null; // null = toda la semana
     dias.forEach(function (f) {
-      var ej = ejDe(f), se = serDe(f), nivel = nivelDia[f] = {};
+      var ej = ejDe(f), se = serDe(f), nivel = nivelDia[f] = {}, ap = aporteDia[f] = {};
       ses += ej.length + (se.length && !ej.some(function (x) { return x.tipo === "gym"; }) ? 1 : 0);
       ej.forEach(function (x) { minutos += Number(x.duracion_min) || 0; kcal += Number(x.kcal) || 0; });
       se.forEach(function (s) {
         kg += (Number(s.peso_kg) || 0) * (Number(s.repeticiones) || 0);
         var inf = infoEjercicio(s.ejercicio);
-        inf.principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 1; });
-        inf.secundarios.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 0.5; });
+        inf.principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 1; sumarAporte(ap, g, String(s.ejercicio).trim(), "p", 1); });
+        inf.secundarios.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 0.5; sumarAporte(ap, g, String(s.ejercicio).trim(), "s", 1); });
       });
       // Sesiones de gym sin series: se estima con la rutina o las notas (3 series por grupo)
       if (!se.length) ej.filter(function (x) { return x.tipo === "gym"; }).forEach(function (x) {
-        infoEjercicio((x.notas || "") + " " + (x.rutina || "")).principales.forEach(function (g) { nivel[g] = (nivel[g] || 0) + 3; });
+        infoEjercicio((x.notas || "") + " " + (x.rutina || "")).principales.forEach(function (g) {
+          nivel[g] = (nivel[g] || 0) + 3;
+          sumarAporte(ap, g, "Gym sin series" + (x.notas ? ": " + String(x.notas).split(/[:.,]/)[0] : ""), "p", 3).sinSeries = true;
+        });
       });
       Object.keys(nivel).forEach(function (g) { nivelSemana[g] = (nivelSemana[g] || 0) + nivel[g]; });
     });
     var nivel = elegido ? nivelDia[elegido] : nivelSemana;
+    var aporte = {};
+    (elegido ? [elegido] : dias).forEach(function (f) {
+      Object.keys(aporteDia[f]).forEach(function (g) { Object.keys(aporteDia[f][g]).forEach(function (n) { var x = aporteDia[f][g][n], y = sumarAporte(aporte, g, n, "p", x.p); y.s += x.s; y.sinSeries = y.sinSeries || x.sinSeries; }); });
+    });
     var etiquetaSemana = (estado.semanaEntreno || 0) === 0 ? "Esta semana" : corta(dias[0]) + " – " + corta(dias[6]);
     raiz.appendChild(h("div", { class: "hero hero-ent" },
       h("div", { class: "sem-cab" },
@@ -1220,9 +1249,13 @@
         onclick: function () { if (!elegido) { var u = dias.filter(function (f) { return f <= hoy && (ejDe(f).length || serDe(f).length); }).pop(); if (u) { estado.diaEntreno = u; pintar(); } } } }));
     raiz.appendChild(h("div", { class: "graf" }, h("h3", { text: "Músculos trabajados" }), selector,
       h("div", { class: "d", text: cuando + " · más oscuro = más series" }),
-      h("div", { class: "cuerpo-fig" }, figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
+      h("div", { class: "cuerpo-fig", onclick: function (ev) { var el = ev.target.closest && ev.target.closest("[data-g]"); if (el) abrirMusculo(el.getAttribute("data-g"), aporte[el.getAttribute("data-g")] || {}, cuando); } },
+        figuraCuerpo("frente", nivel), figuraCuerpo("espalda", nivel)),
       leyenda([["#E3E8E0", "Sin trabajar"], ["#B8E68F", "Poco"], ["#2FA36B", "Medio"], ["#0E6B47", "Mucho"]]),
-      gruposSem.length ? h("div", { class: "chips-m" }, gruposSem.map(function (g) { return h("span", { text: GRUPOS[g] + " · " + fmt(nivel[g], 0) + " series" }); }))
+      gruposSem.length ? h("div", { class: "chips-m" }, gruposSem.map(function (g) {
+        return h("button", { type: "button", class: "chip-musculo", "aria-label": GRUPOS[g] + ": " + fmt(nivel[g], 0) + " series. Ver qué ejercicios", text: GRUPOS[g] + " · " + fmt(nivel[g], 0) + " series ›", onclick: function () { abrirMusculo(g, aporte[g] || {}, cuando); } });
+      })) : null,
+      gruposSem.length ? h("div", { class: "nota", text: "Toca un músculo (o la figura) para ver qué ejercicios lo trabajaron." })
         : h("div", { class: "nota", text: elegido ? "Ese día no hubo gym." : "Aún no hay series de gym esta semana." })));
 
     // Sesiones de la semana (lo más reciente primero)
@@ -1581,7 +1614,7 @@
       var renombra = nombreViejo && n !== nombreViejo;
       var cambiaClave = nombreViejo && claveEj(n) !== claveEj(nombreViejo);
       var otro = misEjercicios().filter(function (e) { return claveEj(e.nombre) === claveEj(n); })[0];
-      if (otro && (nombreViejo ? cambiaClave : !!otro.fila)) return aviso("Ya tienes un ejercicio que se llama «" + otro.nombre + "». Usa otro nombre.", true);
+      if (otro && (nombreViejo ? cambiaClave : !!otro.fila)) return aviso("Ya tienes un ejercicio que se llama «" + otro.nombre + "». " + (nombreViejo ? "Para juntarlos, usa «🔗 Unir con otro ejercicio» (abajo)." : "Usa otro nombre."), true);
       var cuantas = renombra ? estado.tablas.series_gym.filter(function (s) { return claveEj(s.ejercicio) === claveEj(nombreViejo); }).length : 0;
       var enRutinas = renombra ? estado.tablas.rutinas.filter(function (t) { return claveEj(t.ejercicio) === claveEj(nombreViejo); }).length : 0;
       if (renombra && (cuantas || enRutinas) && !confirm("¿Cambiar «" + nombreViejo + "» por «" + n + "»? También se cambia en " + plural(cuantas, "serie registrada", "series registradas") + " y en " + plural(enRutinas, "tarjeta de rutina", "tarjetas de rutinas") + ".")) return;
@@ -1615,6 +1648,7 @@
         return borrarFotosSueltas(sueltas);
       }, function (e) { guardarCache(); guardar.disabled = false; guardar.textContent = "Guardar ejercicio"; manejarError(e); });
     } });
+    var unir = d && misEjercicios().some(function (e) { return claveEj(e.nombre) === claveEj(d.nombre); }) ? h("button", { class: "btn sec", type: "button", text: "🔗 Unir con otro ejercicio", onclick: function () { abrirUnir(d.nombre); } }) : null;
     var quitar = fila ? h("button", { class: "btn peligro", type: "button", text: d.ficha ? "Quitar mis cambios (volver a la biblioteca)" : "Borrar este ejercicio", onclick: function () {
       if (!confirm(d.ficha ? "¿Volver a las fotos, músculos y pasos de la biblioteca? Tus fotos de este ejercicio se borran." : "¿Borrar «" + fila.nombre + "»? Tus series registradas y tus rutinas no se borran, pero quedará sin fotos.")) return;
       quitar.disabled = true;
@@ -1640,11 +1674,64 @@
       h("label", { for: "f-ej-nota", text: "Nota (opcional)" }), nota,
       guardar,
       h("p", { class: "ayuda centro", text: "Los cambios se ven en todas tus rutinas. Si cambias el nombre, también se corrige en tu historial de series." }),
-      quitar));
+      unir, quitar));
     alCambiarNombre();
     if (nombre) sugerencia.textContent = "";
   }
 
+  /** Elegir con qué ejercicio unir este (queda el nombre del que elijas). */
+  function abrirUnir(origen) {
+    var buscar = h("input", { id: "f-buscar-unir", type: "search", placeholder: "Busca el ejercicio…", "aria-label": "Buscar ejercicio", autocomplete: "off" });
+    var cont = h("div", { class: "lista" });
+    var palabrasO = sinTildes(origen).split(/[^a-z0-9ñ]+/).filter(function (w) { return w.length > 2; });
+    var parecido = function (n) { var t = sinTildes(n); return palabrasO.filter(function (w) { return t.indexOf(w) >= 0; }).length; };
+    var otros = misEjercicios().filter(function (e) { return claveEj(e.nombre) !== claveEj(origen); })
+      .sort(function (a, b) { return parecido(b.nombre) - parecido(a.nombre) || a.nombre.localeCompare(b.nombre, "es"); });
+    function mostrar() {
+      var q = sinTildes(buscar.value).trim();
+      cont.textContent = "";
+      otros.filter(function (e) { return !q || sinTildes(e.nombre).indexOf(q) >= 0; }).slice(0, 40).forEach(function (e) {
+        var info = infoEjercicio(e.nombre), partes = [];
+        if (e.series) partes.push(plural(e.series, "serie", "series"));
+        if (e.nRutinas) partes.push("en " + plural(e.nRutinas, "rutina", "rutinas"));
+        if (info.propias) partes.push("📷 fotos tuyas");
+        cont.appendChild(h("button", { type: "button", class: "item con-emo", "aria-label": "Unir con " + e.nombre, onclick: function () { unirEjercicios(origen, e.nombre); } },
+          miniEjercicio(info, "emo mini-foto"), h("div", { class: "t" }, h("b", { text: e.nombre }), h("span", { text: partes.join(" · ") || "sin registros" }))));
+      });
+      if (!cont.childNodes.length) cont.appendChild(h("p", { class: "ayuda", text: "No encontré ese ejercicio." }));
+    }
+    buscar.addEventListener("input", mostrar);
+    abrirHoja("Unir «" + origen + "» con…", h("div", { style: "display:flex;flex-direction:column;gap:10px" },
+      h("p", { class: "ayuda", text: "Elige el ejercicio con el que es el mismo. Su historial se junta en uno solo y queda el nombre del que elijas. Se conservan las fotos que subiste." }),
+      buscar, cont));
+    mostrar();
+  }
+  /** Une dos ejercicios: el historial de «origen» pasa a «destino»; quedan las fotos de destino (o las de origen si destino no tiene). */
+  function unirEjercicios(origen, destino) {
+    var kO = claveEj(origen);
+    var nSeries = estado.tablas.series_gym.filter(function (x) { return claveEj(x.ejercicio) === kO; }).length;
+    var nRut = hayRutinas() ? estado.tablas.rutinas.filter(function (t) { return claveEj(t.ejercicio) === kO; }).length : 0;
+    var fO = filaEjercicio(origen), fD = filaEjercicio(destino);
+    var propiasO = fO ? [fO.foto_a, fO.foto_b].filter(Boolean) : [], propiasD = fD ? [fD.foto_a, fD.foto_b].filter(Boolean) : [];
+    var mueveFotos = fO && fD && !propiasD.length && propiasO.length;
+    var queda = propiasD.length ? "las fotos de «" + destino + "»" : propiasO.length ? "las fotos de «" + origen + "»" : "las fotos de la biblioteca";
+    if (!confirm("¿Unir «" + origen + "» con «" + destino + "»?\n\n• Sus " + plural(nSeries, "serie", "series") + (nRut ? " y " + plural(nRut, "tarjeta de rutina", "tarjetas de rutinas") : "") + " pasan a «" + destino + "».\n• Quedan " + queda + ".\n• «" + origen + "» deja de existir.")) return;
+    aviso("Uniendo…");
+    var paso = Promise.resolve();
+    if (mueveFotos) paso = api("actualizar", { tabla: "ejercicios", id: fD.id, fila: Object.assign({}, fD, { foto_a: fO.foto_a || null, foto_b: fO.foto_b || null }) })
+      .then(function () { fD.foto_a = fO.foto_a || null; fD.foto_b = fO.foto_b || null; });
+    paso.then(function () { return renombrarEnServicio(origen, destino); })
+      .then(function () {
+        if (fO && fD) return api("borrar", { tabla: "ejercicios", id: fO.id }).then(function () { estado.tablas.ejercicios = estado.tablas.ejercicios.filter(function (x) { return x !== fO; }); });
+      })
+      .then(function () {
+        if (estado.sesion) { estado.sesion.ejercicios.forEach(function (e) { if (claveEj(e.nombre) === kO) e.nombre = destino; }); guardarSesion(); }
+        guardarCache(); cerrarHoja();
+        aviso("Listo: «" + origen + "» quedó unido a «" + destino + "» (" + plural(nSeries, "serie", "series") + ")");
+        pintar();
+        if (fO && fD && !mueveFotos) return borrarFotosSueltas(propiasO.filter(function (x) { return !/^bd:/.test(x); }));
+      }, function (e) { guardarCache(); manejarError(e); pintar(); });
+  }
   /** Cambia el nombre en tus series, rutinas y ejercicios (en tu hoja y en el teléfono). */
   function renombrarEnServicio(viejo, nuevo) {
     return api("renombrar", { viejo: viejo, nuevo: nuevo }).then(function () {

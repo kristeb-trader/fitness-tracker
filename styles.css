@@ -548,3 +548,6 @@ img.sin-foto { visibility: hidden; }
 .ses-desc-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ses-deshacer { border: 0; background: rgba(255,255,255,.1); color: #fff; border-radius: 10px; padding: 6px 10px; font-weight: 800; font-size: 12.5px; white-space: nowrap; }
 .ses-deshacer:active { background: rgba(255,255,255,.2); }
+.chip-musculo { border: 0; font: inherit; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--lime-soft); color: var(--lime-ink); cursor: pointer; transition: transform .15s; }
+.chip-musculo:active { transform: scale(.95); }
+.cuerpo-fig [data-g]:hover { opacity: .8; }

@@ -1067,6 +1067,82 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
   }
 
   // =========================================================================
+  console.log('Unir ejercicios y ver qué ejercicio trabajó cada músculo');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    const hace7 = new Date(); hace7.setDate(hace7.getDate() - 7);
+    const f7 = isoLocal(hace7);
+    const serie = (f, ej, n, kg) => s.post({ token: T, accion: 'agregar', tabla: 'series_gym', fila: { fecha: f, rutina: 'Pierna', ejercicio: ej, numero_serie: n, peso_kg: kg, repeticiones: 12 } });
+    serie(f7, 'Prensa', 1, 90); serie(f7, 'Prensa', 2, 100);
+    serie(hoy, 'Prensa de piernas', 1, 120); serie(hoy, 'Prensa de piernas', 2, 140);
+    serie(hoy, 'Elevación de cadera (hip thrust)', 1, 40);
+    const foto = 'data:image/png;base64,' + fs.readFileSync(path.join(__dirname, 'foto-ab.png')).toString('base64');
+    const fa = s.post({ token: T, accion: 'subirFoto', imagen: foto }).id, fb = s.post({ token: T, accion: 'subirFoto', imagen: foto }).id;
+    s.post({ token: T, accion: 'agregar', tabla: 'ejercicios', fila: { nombre: 'Prensa', foto_a: fa, foto_b: fb } });
+    s.post({ token: T, accion: 'agregar', tabla: 'ejercicios', fila: { nombre: 'Prensa de piernas', principales: 'cuadriceps' } });
+    s.post({ token: T, accion: 'agregar', tabla: 'ejercicios', fila: { nombre: 'Elevación de cadera (hip thrust)', principales: 'gluteos,cuadriceps,espalda', secundarios: 'femorales' } });
+    s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Pierna', orden: 1, ejercicio: 'Prensa de piernas', peso_kg: 120, series: 4, repeticiones: 12 } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+    const col = (hoja, c) => s.hojas[hoja].filas[0].indexOf(c);
+
+    await prueba('tocar «Espalda» en Músculos trabajados muestra qué ejercicio la trabajó', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.chip-musculo:has-text("Espalda")');
+      await page.waitForSelector('dialog .lista');
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('Elevación de cadera (hip thrust)') && t.includes('1 serie · principal') && !t.includes('Prensa'), t);
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'musculo-espalda.png') });
+      await page.click('dialog .item:has-text("Elevación de cadera")');
+      await page.waitForSelector('dialog .ficha');
+      await page.keyboard.press('Escape');
+    });
+    await prueba('tocar el músculo en la figura abre la misma lista', async () => {
+      await page.locator('.cuerpo-fig [data-g="cuadriceps"]').first().click();
+      await page.waitForSelector('dialog .lista');
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('Prensa de piernas') && t.includes('Elevación de cadera'), t);
+      await page.keyboard.press('Escape');
+    });
+    await prueba('unir «Prensa de piernas» con «Prensa»: historial junto y quedan tus fotos', async () => {
+      await page.click('.seg button:has-text("Ejercicios")');
+      await page.click('.bib-card:has(b:text-is("Prensa de piernas"))');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.click('dialog button:has-text("Unir con otro ejercicio")');
+      await page.waitForSelector('#f-buscar-unir');
+      assert.strictEqual(await page.locator('dialog .item').first().getAttribute('aria-label'), 'Unir con Prensa', 'el más parecido sale primero');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog [aria-label="Unir con Prensa"]');
+      await page.waitForSelector('text=quedó unido a «Prensa»');
+      const nombres = s.hojas.series_gym.filas.slice(1).map((f) => f[col('series_gym', 'ejercicio')]);
+      assert.strictEqual(nombres.filter((n) => n === 'Prensa').length, 4, nombres.join('|'));
+      assert.ok(!nombres.includes('Prensa de piernas'));
+      assert.strictEqual(s.hojas.rutinas.filas[1][col('rutinas', 'ejercicio')], 'Prensa');
+      const ej = s.hojas.ejercicios.filas.slice(1).filter((f) => /^Prensa/.test(f[col('ejercicios', 'nombre')]));
+      assert.strictEqual(ej.length, 1, 'queda un solo ejercicio');
+      assert.strictEqual(ej[0][col('ejercicios', 'foto_a')], fa, 'con tus fotos');
+      assert.strictEqual(s.hojas.fotos.getLastRow(), 3, 'las fotos no se borran');
+      const t = await page.innerText('.bib-card:has(b:text-is("Prensa"))');
+      assert.ok(t.includes('140 kg'), 'el último registro (de «Prensa de piernas») ahora es de «Prensa»: ' + t);
+      assert.strictEqual(await page.locator('.bib-card:has(b:text-is("Prensa de piernas"))').count(), 0);
+    });
+    await prueba('cambiar el nombre a uno que ya existe sugiere unirlos', async () => {
+      await page.click('.bib-card:has(b:text-is("Elevación de cadera (hip thrust)"))');
+      await page.click('dialog button:has-text("Editar ejercicio")');
+      await page.fill('#f-ej-nombre', 'Prensa');
+      await page.click('dialog button:has-text("Guardar ejercicio")');
+      await page.waitForSelector('text=Para juntarlos, usa «🔗 Unir con otro ejercicio»');
+      await page.keyboard.press('Escape');
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
   console.log('Servicio versión 4 (antes de «Mis ejercicios»)');
   {
     const s = crearServicio({ codigo: path.join(__dirname, 'servicio-v4.gs.txt') });
