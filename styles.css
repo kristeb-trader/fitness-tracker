@@ -545,3 +545,6 @@ img.sin-foto { visibility: hidden; }
 .med .prog { transition: stroke-dashoffset 1.3s cubic-bezier(.22,1,.36,1); }
 .med .estado { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: rgba(184,240,90,.16); color: #B8F05A; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .med .estado.ambar { background: rgba(245,176,77,.18); color: #F5B04D; }
+.ses-desc-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.ses-deshacer { border: 0; background: rgba(255,255,255,.1); color: #fff; border-radius: 10px; padding: 6px 10px; font-weight: 800; font-size: 12.5px; white-space: nowrap; }
+.ses-deshacer:active { background: rgba(255,255,255,.2); }

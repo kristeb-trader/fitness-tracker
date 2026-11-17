@@ -1007,6 +1007,16 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(nuevas().length, 0);
       assert.strictEqual(await page.locator('.ses-serie.lista').count(), 0);
     });
+    await prueba('«Deshacer serie» en el descanso la quita de tu hoja', async () => {
+      await page.click('[aria-label="Guardar la serie 1"]');
+      await page.waitForSelector('.ses-descanso.ver');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 1);
+      await page.click('.ses-deshacer');
+      await page.waitForSelector('text=Serie 1 deshecha');
+      assert.strictEqual(nuevas().length, 0);
+      assert.strictEqual(await page.locator('.ses-serie.lista').count(), 0);
+      await page.waitForFunction(() => !document.querySelector('.ses-descanso'));
+    });
     await prueba('al terminar las series de un ejercicio, pasa al siguiente con sus valores de la última vez', async () => {
       await page.click('[aria-label="Guardar la serie 1"]');
       await page.waitForSelector('.ses-serie.lista');
@@ -1033,6 +1043,24 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok(ej && ej[col('ejercicio', 'kcal')] === 300 && ej[col('ejercicio', 'notas')] === RUT && ej[col('ejercicio', 'duracion_min')] >= 1, String(ej));
       assert.strictEqual(await page.locator('.banda-entreno').count(), 0, 'ya no hay entreno en curso');
       assert.strictEqual(await page.evaluate(() => localStorage.getItem('sesion_entreno')), null);
+    });
+    await prueba('«Cancelar entreno» borra las series que guardaste en él', async () => {
+      const antes = nuevas().length;
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      await page.click('.rut-card');
+      await page.click('button:has-text("▶ Empezar entreno")');
+      await page.click('[aria-label="Guardar la serie 1"]');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 1);
+      assert.strictEqual(nuevas().length, antes + 1);
+      await page.click('.ses-descanso button:has-text("Seguir")');
+      await page.click('.ses-terminar');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Cancelar entreno y borrar su serie")');
+      await page.waitForSelector('text=Entreno cancelado');
+      assert.strictEqual(nuevas().length, antes, 'la serie de este entreno se borró; las de antes siguen');
+      assert.strictEqual(await page.evaluate(() => localStorage.getItem('sesion_entreno')), null);
+      await page.waitForSelector('button:has-text("▶ Empezar entreno")');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

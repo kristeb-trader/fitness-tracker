@@ -2099,7 +2099,18 @@
     });
     estado.sesion = { rutina: r.nombre, fecha: iso(new Date()), t0: Date.now(), actual: 0, ejercicios: ejercicios, records: 0 };
     guardarSesion();
+    precargarFotosSesion(estado.sesion);
     estado.pantalla = "sesion"; pintar(); window.scrollTo(0, 0);
+  }
+  /** Trae de una vez las fotos de todos los ejercicios (para no esperar en el gym aunque haya poca señal). */
+  var fotosPrecargadas = null;
+  function precargarFotosSesion(s) {
+    var clave = s.rutina + "|" + s.t0;
+    if (fotosPrecargadas === clave) return;
+    fotosPrecargadas = clave;
+    var ids = [];
+    s.ejercicios.forEach(function (e) { (infoEjercicio(e.nombre).propias || []).forEach(function (id) { ids.push(id); }); });
+    if (ids.length) traerFotos(ids).catch(function () { fotosPrecargadas = null; });
   }
   function seriesHechas(s) { return s.ejercicios.reduce(function (a, e) { return a + e.filas.filter(function (f) { return f.estado === "ok"; }).length; }, 0); }
   function seriesTotal(s) { return s.ejercicios.reduce(function (a, e) { return a + e.filas.length; }, 0); }
@@ -2111,6 +2122,7 @@
     if (!s) { estado.pantalla = "entreno"; return pintar(); }
     raiz.textContent = "";
     mantenerPantalla(true);
+    precargarFotosSesion(s);
     var e = s.ejercicios[s.actual], info = infoEjercicio(e.nombre);
     var hechas = seriesHechas(s), total = seriesTotal(s), C = 119.4;
     var reloj = h("span", { class: "ses-reloj num", text: tiempoSesion(s) });
@@ -2171,22 +2183,39 @@
     f.estado = "guardando"; guardarSesion(); pintar();
     // El descanso empieza en seguida: no espera a Google
     var quedan = e.filas.filter(function (x) { return x.estado !== "ok" && x !== f; });
-    if (quedan.length) descanso(DESCANSO_SERIE, "Sigue: serie " + (e.filas.indexOf(quedan[0]) + 1) + " · " + fmt(quedan[0].kg, 1) + " kg × " + quedan[0].reps, null);
+    var deshacer = { texto: "Serie " + (i + 1) + " · " + fmt(f.kg, 1) + " kg × " + f.reps, accion: function () { deshacerSerie(s, e, f, i); } };
+    if (quedan.length) descanso(DESCANSO_SERIE, "Sigue: serie " + (e.filas.indexOf(quedan[0]) + 1) + " · " + fmt(quedan[0].kg, 1) + " kg × " + quedan[0].reps, null, deshacer);
     else {
       var sig = s.ejercicios.findIndex(function (x, k) { return k > s.actual && x.filas.some(function (y) { return y.estado !== "ok"; }); });
-      if (sig >= 0) descanso(DESCANSO_EJERCICIO, "Sigue: " + s.ejercicios[sig].nombre, function () { if (estado.sesion === s) { s.actual = sig; guardarSesion(); if (estado.pantalla === "sesion") { pintar(); window.scrollTo(0, 0); } } });
+      if (sig >= 0) descanso(DESCANSO_EJERCICIO, "Sigue: " + s.ejercicios[sig].nombre, function () { if (estado.sesion === s) { s.actual = sig; guardarSesion(); if (estado.pantalla === "sesion") { pintar(); window.scrollTo(0, 0); } } }, deshacer);
     }
     api("agregar", { tabla: "series_gym", fila: fila }).then(function (r) {
       f.estado = "ok"; f.id = r.id;
       estado.tablas.series_gym.push(Object.assign({ id: r.id }, fila)); guardarCache();
+      if (f.deshacer) { delete f.deshacer; return deshacerSerie(s, e, f, i); } // la deshizo mientras se guardaba
       if (record) { e.record = f.kg; s.records++; aviso("🏆 ¡Nuevo récord! " + fmt(f.kg, 1) + " kg en " + e.nombre); if (ev) confeti(ev); }
       else aviso("✓ Serie " + (i + 1) + " guardada");
       guardarSesion(); if (estado.pantalla === "sesion" && estado.sesion === s) pintar();
-      if (seriesHechas(s) === seriesTotal(s)) setTimeout(function () { if (estado.sesion === s) terminarEntreno(); }, 700);
+      if (seriesHechas(s) === seriesTotal(s)) setTimeout(function () { if (estado.sesion === s && !document.querySelector(".ses-descanso")) terminarEntreno(); }, 700);
     }, function (err) {
       f.estado = "error"; guardarSesion(); if (estado.pantalla === "sesion") pintar();
       aviso("No se guardó la serie " + (i + 1) + ": " + textoError(err) + " Toca ↻ para intentarlo otra vez.", true);
     });
+  }
+  /** Deshacer la serie que acabas de guardar (sin preguntar: lo pediste con el botón). */
+  function deshacerSerie(s, e, f, i) {
+    if (f.estado === "guardando") { f.deshacer = true; return; }
+    if (!f.id) { f.estado = ""; guardarSesion(); return pintar(); }
+    var id = f.id;
+    f.estado = "guardando"; pintar();
+    api("borrar", { tabla: "series_gym", id: id }).then(function () {
+      estado.tablas.series_gym = estado.tablas.series_gym.filter(function (x) { return x.id !== id; }); guardarCache();
+      if (f.kg === e.record && s.records) { s.records--; e.record = recordAntes(e.nombre); }
+      f.estado = ""; delete f.id; guardarSesion();
+      var k = s.ejercicios.indexOf(e); if (k >= 0) s.actual = k;
+      if (estado.pantalla === "sesion") pintar();
+      aviso("Serie " + (i + 1) + " deshecha: no quedó en tu hoja");
+    }, function (err) { f.estado = "ok"; f.id = id; guardarSesion(); pintar(); manejarError(err); });
   }
   function borrarSerie(s, e, f, i) {
     if (!f.id || !confirm("¿Borrar la serie " + (i + 1) + " (" + fmt(f.kg, 1) + " kg × " + f.reps + ") de tu hoja?")) return;
@@ -2198,7 +2227,7 @@
   }
 
   /** Cuenta regresiva del descanso (abajo, sobre la pantalla). */
-  function descanso(segundos, texto, alTerminar) {
+  function descanso(segundos, texto, alTerminar, deshacer) {
     clearInterval(relojDescanso);
     var viejo = document.querySelector(".ses-descanso"); if (viejo) viejo.remove();
     var total = segundos, fin = Date.now() + segundos * 1000, C = 263.9;
@@ -2219,7 +2248,11 @@
     }
     var ajustar = function (d) { return function () { fin = Math.max(Date.now() + 1000, fin + d * 1000); total = Math.max(total, Math.ceil((fin - Date.now()) / 1000)); pinta(); }; };
     caja.appendChild(anillo);
-    caja.appendChild(h("div", {}, h("b", { text: "Descansa" }), h("p", { text: texto }),
+    caja.appendChild(h("div", {}, h("div", { class: "ses-desc-cab" }, h("b", { text: "Descansa" }),
+        deshacer ? h("button", { type: "button", class: "ses-deshacer", "aria-label": "Deshacer la última serie: " + deshacer.texto, onclick: function () {
+          alTerminar = null; cerrar(false); deshacer.accion();
+        } }, "↶ Deshacer serie") : null),
+      h("p", { text: texto }),
       h("div", { class: "ses-desc-acc" },
         h("button", { type: "button", text: "−15 s", onclick: ajustar(-15) }),
         h("button", { type: "button", text: "+15 s", onclick: ajustar(15) }),
@@ -2256,6 +2289,24 @@
     var campoMin = h("input", { id: "f-ses-min", type: "number", inputmode: "numeric", min: 1, max: 600, value: min, "aria-label": "Duración en minutos" });
     var campoKcal = h("input", { id: "f-ses-kcal", type: "number", inputmode: "numeric", min: 0, max: 5000, value: kcalEst, "aria-label": "Calorías" });
     var cerrarSesion = function () { estado.sesion = null; guardarSesion(); mantenerPantalla(false); clearInterval(relojSesion); };
+    var guardadas = seriesGuardadas(s);
+    var botonCancelar = h("button", { class: "btn peligro", type: "button", text: !guardadas.length ? "Cancelar entreno" : guardadas.length === 1 ? "Cancelar entreno y borrar su serie" : "Cancelar entreno y borrar sus " + guardadas.length + " series", onclick: function () {
+      if (!confirm(guardadas.length ? "¿Cancelar el entreno? Se " + (guardadas.length === 1 ? "borra de tu hoja la serie" : "borran de tu hoja las " + guardadas.length + " series") + " que guardaste en él." : "¿Cancelar el entreno?")) return;
+      botonCancelar.disabled = true; botonCancelar.textContent = "Borrando…";
+      var fallos = 0;
+      guardadas.reduce(function (p, f) {
+        return p.then(function () {
+          return api("borrar", { tabla: "series_gym", id: f.id }).then(function () {
+            var id = f.id; estado.tablas.series_gym = estado.tablas.series_gym.filter(function (x) { return x.id !== id; }); delete f.id; f.estado = "";
+          }, function (err) { if (err && err.noAutorizado) throw err; fallos++; });
+        });
+      }, Promise.resolve()).then(function () {
+        guardarCache();
+        if (fallos) { guardarSesion(); botonCancelar.disabled = false; botonCancelar.textContent = "Cancelar entreno"; return aviso("No pude borrar " + plural(fallos, "serie", "series") + ". Revisa tu internet e inténtalo otra vez.", true); }
+        cerrarSesion(); cerrarHoja(); aviso(guardadas.length ? "Entreno cancelado: se borraron sus series" : "Entreno cancelado");
+        estado.pantalla = "rutina"; estado.rutinaActual = s.rutina; pintar(); window.scrollTo(0, 0);
+      }, manejarError);
+    } });
     var guardar = h("button", { class: "btn lima", type: "button", text: ya ? "Guardar otra sesión de gym" : "Guardar sesión de gym", onclick: function () {
       var m2 = Number(campoMin.value), k2 = campoKcal.value === "" ? null : Number(campoKcal.value);
       if (!(m2 >= 1 && m2 <= 600)) return aviso("Revisa los minutos.", true);
@@ -2282,7 +2333,13 @@
       h("button", { class: "btn sec", type: "button", text: hechas ? "Terminar sin guardar la sesión" : "Salir del entreno", onclick: function () {
         cerrarSesion(); cerrarHoja(); estado.pantalla = "rutina"; estado.rutinaActual = s.rutina; pintar();
       } }),
-      h("button", { class: "btn sec", type: "button", text: "Seguir entrenando", onclick: function () { cerrarHoja(); } })));
+      h("button", { class: "btn sec", type: "button", text: "Seguir entrenando", onclick: function () { cerrarHoja(); } }),
+      botonCancelar));
+  }
+  function seriesGuardadas(s) {
+    var l = [];
+    s.ejercicios.forEach(function (e) { e.filas.forEach(function (f) { if (f.id) l.push(f); }); });
+    return l;
   }
 
   /** Última medición contra la anterior, dato por dato (cada dato contra su propia medición anterior). */
