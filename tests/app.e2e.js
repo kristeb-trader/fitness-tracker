@@ -933,6 +933,111 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
   }
 
   // =========================================================================
+  console.log('Modo entreno: registrar cada serie desde la app');
+  {
+    const s = crearServicio();
+    s.ctx.setup();
+    const T = s.props.TOKEN;
+    const RUT = 'Pecho y espalda';
+    const hace7 = new Date(); hace7.setDate(hace7.getDate() - 7);
+    const f7 = isoLocal(hace7);
+    const serie = (ej, n, kg, reps) => s.post({ token: T, accion: 'agregar', tabla: 'series_gym', fila: { fecha: f7, rutina: RUT, ejercicio: ej, numero_serie: n, peso_kg: kg, repeticiones: reps } });
+    serie('Press banca plano', 1, 40, 10); serie('Press banca plano', 2, 45, 8);
+    serie('Remo bajo', 1, 45, 12); serie('Remo bajo', 2, 45, 12);
+    s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: RUT, orden: 1, ejercicio: 'Press banca plano', peso_kg: 40, series: 2, repeticiones: 12 } });
+    s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: RUT, orden: 2, ejercicio: 'Remo bajo' } });
+    const { page, base, errores, cerrar } = await abrir('window.CONFIG={SCRIPT_URL:"' + URL_A + '"};', { [URL_A]: s });
+    await page.goto(base);
+    await entrar(page, T);
+    await page.waitForSelector('.hero');
+    const col = (hoja, c) => s.hojas[hoja].filas[0].indexOf(c);
+    const nuevas = () => s.hojas.series_gym.filas.slice(1).filter((f) => f[col('series_gym', 'fecha')] === hoy);
+
+    await prueba('empezar el entreno desde la rutina', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      await page.click('.rut-card');
+      await page.click('button:has-text("▶ Empezar entreno")');
+      await page.waitForSelector('.ses-barra');
+      assert.ok((await page.innerText('.ses-barra')).includes('0/4'), 'avance 0 de 4 series');
+      assert.strictEqual(await page.innerText('.ses-ej-cab h2'), 'Press banca plano');
+      const pistas = await page.innerText('.ses-pistas');
+      assert.ok(pistas.includes('Meta 2 × 12 · 40 kg') && pistas.includes('Récord 45 kg'), pistas);
+    });
+    await prueba('cada serie viene con el peso y las repeticiones de la rutina; − / + los cambian', async () => {
+      const fila = page.locator('.ses-serie >> nth=0');
+      assert.deepStrictEqual(await fila.locator('output').allInnerTexts(), ['40\nkg', '12\nreps']);
+      for (let i = 0; i < 3; i++) await page.click('[aria-label="Más peso de la serie 1"]');
+      await page.click('[aria-label="Menos repeticiones de la serie 1"]');
+      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('output').allInnerTexts(), ['47,5\nkg', '11\nreps']);
+    });
+    await prueba('✓ guarda la serie en la hoja al instante, avisa el récord y empieza el descanso', async () => {
+      await page.click('[aria-label="Guardar la serie 1"]');
+      await page.waitForSelector('.ses-descanso.ver');
+      await page.waitForSelector('text=¡Nuevo récord! 47,5 kg');
+      const f = nuevas();
+      assert.strictEqual(f.length, 1);
+      assert.strictEqual(f[0][col('series_gym', 'ejercicio')], 'Press banca plano'); assert.strictEqual(f[0][col('series_gym', 'rutina')], RUT);
+      assert.strictEqual(f[0][col('series_gym', 'peso_kg')], 47.5); assert.strictEqual(f[0][col('series_gym', 'repeticiones')], 11); assert.strictEqual(f[0][col('series_gym', 'numero_serie')], 1);
+      assert.ok((await page.innerText('.ses-descanso')).includes('Sigue: serie 2 · 40 kg × 12'));
+      assert.ok((await page.innerText('.ses-barra')).includes('1/4'));
+      if (CAPTURAS) { await page.waitForTimeout(600); await page.screenshot({ path: path.join(CAPTURAS, 'entreno-series.png') }); }
+    });
+    await prueba('el descanso se ajusta y se salta', async () => {
+      const antes = await page.locator('.ses-descanso .txt').textContent();
+      await page.click('.ses-descanso button:has-text("+15 s")');
+      const despues = await page.locator('.ses-descanso .txt').textContent();
+      assert.notStrictEqual(antes, despues);
+      await page.click('.ses-descanso button:has-text("Seguir")');
+      await page.waitForFunction(() => !document.querySelector('.ses-descanso'));
+    });
+    await prueba('si la app se recarga, el entreno sigue donde ibas', async () => {
+      await page.reload();
+      await page.waitForSelector('.banda-entreno');
+      assert.ok((await page.innerText('.banda-entreno')).includes('1 de 4 series'));
+      await page.click('.banda-entreno');
+      await page.waitForSelector('.ses-serie.lista');
+      assert.strictEqual(await page.locator('.ses-serie.lista').count(), 1);
+    });
+    await prueba('tocar una serie guardada la borra de la hoja', async () => {
+      page.once('dialog', (d) => d.accept());
+      await page.click('[aria-label="Serie 1 guardada (tocar para borrarla)"]');
+      await page.waitForSelector('text=Serie borrada');
+      assert.strictEqual(nuevas().length, 0);
+      assert.strictEqual(await page.locator('.ses-serie.lista').count(), 0);
+    });
+    await prueba('al terminar las series de un ejercicio, pasa al siguiente con sus valores de la última vez', async () => {
+      await page.click('[aria-label="Guardar la serie 1"]');
+      await page.waitForSelector('.ses-serie.lista');
+      await page.click('.ses-descanso button:has-text("Seguir")');
+      await page.click('[aria-label="Guardar la serie 2"]');
+      await page.waitForSelector('.ses-descanso.ver >> text=Sigue: Remo bajo');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 2);
+      await page.click('.ses-descanso button:has-text("Seguir")');
+      await page.waitForSelector('.ses-ej-cab h2:text-is("Remo bajo")');
+      assert.strictEqual(await page.locator('.ses-serie').count(), 2, 'tantas series como la última vez');
+      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('output').allInnerTexts(), ['45\nkg', '12\nreps']);
+      const n = nuevas().map((f) => f[col('series_gym', 'numero_serie')]);
+      assert.deepStrictEqual(n, [1, 2]);
+    });
+    await prueba('terminar: resumen y la sesión de gym queda guardada', async () => {
+      await page.click('.ses-terminar');
+      await page.waitForSelector('dialog >> text=¡Buen entreno!');
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('2/4') && t.includes('series'), t);
+      await page.fill('#f-ses-kcal', '300');
+      await page.click('dialog button:has-text("Guardar sesión de gym")');
+      await page.waitForSelector('text=¡Entreno guardado!');
+      const ej = s.hojas.ejercicio.filas.slice(1).find((f) => f[col('ejercicio', 'tipo')] === 'gym');
+      assert.ok(ej && ej[col('ejercicio', 'kcal')] === 300 && ej[col('ejercicio', 'notas')] === RUT && ej[col('ejercicio', 'duracion_min')] >= 1, String(ej));
+      assert.strictEqual(await page.locator('.banda-entreno').count(), 0, 'ya no hay entreno en curso');
+      assert.strictEqual(await page.evaluate(() => localStorage.getItem('sesion_entreno')), null);
+    });
+    await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
+    await cerrar();
+  }
+
+  // =========================================================================
   console.log('Servicio versión 4 (antes de «Mis ejercicios»)');
   {
     const s = crearServicio({ codigo: path.join(__dirname, 'servicio-v4.gs.txt') });
