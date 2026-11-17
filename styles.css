@@ -536,3 +536,12 @@ img.sin-foto { visibility: hidden; }
 .ses-kpis b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
 .ses-kpis small { color: var(--sub); font-weight: 700; font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .ses-ej, .ses-serie.lista .ses-ok { animation: none; } .ses-descanso { transition: none; } }
+
+/* Macros: medidores oscuros con rayitas */
+.macros.medidores { gap: 8px; }
+.med { border-radius: 22px; background: var(--ink); color: #fff; padding: 11px 6px 10px; display: grid; justify-items: center; gap: 4px; text-align: center; box-shadow: 0 10px 24px -14px rgba(15,42,29,.6); min-width: 0; }
+.med .nom { font-size: 12.5px; font-weight: 800; color: #A9BBAF; justify-self: stretch; padding: 0 6px; text-align: left; }
+.med svg { width: 100%; max-width: 112px; overflow: visible; display: block; font-family: inherit; }
+.med .prog { transition: stroke-dashoffset 1.3s cubic-bezier(.22,1,.36,1); }
+.med .estado { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: rgba(184,240,90,.16); color: #B8F05A; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.med .estado.ambar { background: rgba(245,176,77,.18); color: #F5B04D; }

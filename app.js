@@ -458,6 +458,32 @@
 
   var EMOJI_COMIDA = { desayuno: ["🍳", "#FFF4D6"], almuerzo: ["🍛", "#E9F7E1"], cena: ["🍲", "#ECEBFD"], snack: ["🍌", "#FDEBE6"] };
   var EMOJI_EJERCICIO = { gym: ["🏋️", "#FFF1E2"], bici: ["🚴", "#E7F0FE"], caminata: ["🚶", "#E9F7E1"] };
+  /** Medidor con rayitas (proteína, carbos, grasa): el arco se llena y el número cuenta hasta los gramos. */
+  function medidorMacro(nombre, gramos, frac, etiqueta, color, pill, aria) {
+    var cx = 80, cy = 82, r = 58, n = 30, s = "", desde = Math.PI * .85, hasta = Math.PI * 2.15;
+    var pos = function (a, rr) { return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]; };
+    for (var i = 0; i <= n; i++) { var a = desde + (hasta - desde) * i / n, p1 = pos(a, r + 10), p2 = pos(a, r + (i % 5 === 0 ? 17 : 13)); s += '<line x1="' + p1[0].toFixed(1) + '" y1="' + p1[1].toFixed(1) + '" x2="' + p2[0].toFixed(1) + '" y2="' + p2[1].toFixed(1) + '" stroke="rgba(255,255,255,.30)" stroke-width="1.6"/>'; }
+    var largo = r * (hasta - desde), a1 = pos(desde, r), b1 = pos(hasta, r);
+    var arco = "M" + a1[0].toFixed(1) + " " + a1[1].toFixed(1) + " A" + r + " " + r + " 0 1 1 " + b1[0].toFixed(1) + " " + b1[1].toFixed(1);
+    var fin = (largo * (1 - Math.max(0, Math.min(1, frac || 0)))).toFixed(1);
+    s += '<path d="' + arco + '" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="12" stroke-linecap="round"/>';
+    s += '<path class="prog" d="' + arco + '" fill="none" stroke="' + color + '" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + largo.toFixed(1) + '" stroke-dashoffset="' + largo.toFixed(1) + '"/>';
+    s += '<text class="valor" x="80" y="90" text-anchor="middle" fill="#FFFFFF" stroke="none" font-size="34" font-weight="800">' + fmt(gramos) + "</text>";
+    s += '<text x="80" y="110" text-anchor="middle" fill="#A9BBAF" stroke="none" font-size="11.5" font-weight="800" letter-spacing="1.2">' + etiqueta + "</text>";
+    var t = document.createElement("template");
+    t.innerHTML = '<svg viewBox="0 -2 160 116" aria-hidden="true">' + s + "</svg>";
+    var grafico = t.content.firstChild, prog = grafico.querySelector(".prog"), valor = grafico.querySelector(".valor");
+    var reducir = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducir) prog.setAttribute("stroke-dashoffset", fin);
+    else {
+      requestAnimationFrame(function () { requestAnimationFrame(function () { prog.style.strokeDashoffset = fin; }); });
+      var t0 = null, total = Number(gramos) || 0;
+      requestAnimationFrame(function paso(ts) { t0 = t0 || ts; var p = Math.min(1, (ts - t0) / 1100), e = 1 - Math.pow(1 - p, 4); valor.textContent = fmt(total * e); if (p < 1) requestAnimationFrame(paso); });
+    }
+    return h("div", { class: "med", role: "img", "aria-label": aria },
+      h("span", { class: "nom", text: nombre }), grafico,
+      h("span", { class: "estado" + (pill[1] === "ambar" ? " ambar" : ""), text: pill[0] }));
+  }
   function anilloMacro(pct, color, texto) {
     var C = 2 * Math.PI * 26, p = Math.max(0, Math.min(1, pct));
     var s = svg('<circle cx="32" cy="32" r="26" stroke="#EAF0E6" stroke-width="8"/><circle cx="32" cy="32" r="26" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (p * C).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 32 32)"/>', 64, 64);
@@ -519,10 +545,14 @@
 
     // Macros
     var kT = prot * 4 + carb * 4 + gra * 9 || 1;
-    raiz.appendChild(h("div", { class: "macros" },
-      h("div", { class: "macro" }, anilloMacro(prot / protMin, "#0F2A1D", Math.round(prot / protMin * 100) + "%"), h("b", { text: fmt(prot) + " g" }), h("small", { text: "Proteína · meta " + fmt(protMin) })),
-      h("div", { class: "macro" }, anilloMacro(carb * 4 / kT, "#2FA36B", Math.round(carb * 4 / kT * 100) + "%"), h("b", { text: fmt(carb) + " g" }), h("small", { text: "Carbos · de kcal" })),
-      h("div", { class: "macro" }, anilloMacro(gra * 9 / kT, "#F0A43A", Math.round(gra * 9 / kT * 100) + "%"), h("b", { text: fmt(gra) + " g" }), h("small", { text: "Grasa · de kcal" }))));
+    var protMax = numMeta(m.proteina_max_g, 160), sinComida = !d.comidas.length;
+    var pctC = Math.round(carb * 4 / kT * 100), pctG = Math.round(gra * 9 / kT * 100);
+    raiz.appendChild(h("div", { class: "macros medidores" },
+      medidorMacro("Proteína", prot, prot / protMin, "G DE " + fmt(protMin), "#B8F05A",
+        sinComida ? ["Sin comidas", "ok"] : prot < protMin ? ["Faltan " + fmt(protMin - prot) + " g", "ambar"] : prot <= protMax ? ["✓ En meta", "ok"] : ["+" + fmt(prot - protMax) + " g", "ambar"],
+        "Proteína: " + fmt(prot) + " g de " + fmt(protMin) + " g de meta"),
+      medidorMacro("Carbos", carb, carb * 4 / kT, pctC + " % KCAL", "#5FD69A", [fmt(carb * 4) + " kcal", "ok"], "Carbos: " + fmt(carb) + " g, " + pctC + " % de tus calorías"),
+      medidorMacro("Grasa", gra, gra * 9 / kT, pctG + " % KCAL", "#F5B04D", [fmt(gra * 9) + " kcal", "ok"], "Grasa: " + fmt(gra) + " g, " + pctG + " % de tus calorías")));
 
     // Sueño y entreno
     var grupos = agruparSeries(d.series);

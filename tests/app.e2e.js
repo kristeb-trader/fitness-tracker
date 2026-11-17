@@ -123,8 +123,9 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.deepStrictEqual(textos.sort(), ['Pollo con arroz', 'Yogur griego']);
       const hero = await page.innerText('.hero');
       assert.ok(/Consumido\s+800 kcal/.test(hero) && /Gastado\s+2.500 kcal/.test(hero) && hero.includes('−1.700 kcal'), hero);
-      const mac = await page.innerText('.macros');
-      assert.ok(mac.includes('64 g') && mac.includes('meta 130'), mac);
+      const mac = await page.locator('.macros .med').evaluateAll((l) => l.map((x) => x.getAttribute('aria-label')));
+      assert.ok(mac[0].includes('64 g de 130 g'), mac.join('|'));
+      assert.ok((await page.innerText('.macros')).includes('Faltan 66 g'));
     });
     await prueba('no aparece el aviso de servicio desactualizado', async () => {
       assert.strictEqual(await page.locator('.banda').count(), 0);
