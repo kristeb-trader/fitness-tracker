@@ -2285,7 +2285,9 @@
   }
 
   function guardarSerie(s, e, f, i, ev) {
-    var numero = estado.tablas.series_gym.filter(function (x) { return x.fecha === s.fecha && claveEj(x.ejercicio) === claveEj(e.nombre); }).length + 1;
+    // Número siguiente al más alto del día (contar series repetía números si borrabas una y registrabas otra)
+    var numero = estado.tablas.series_gym.filter(function (x) { return x.fecha === s.fecha && claveEj(x.ejercicio) === claveEj(e.nombre); })
+      .reduce(function (m, x) { return Math.max(m, Number(x.numero_serie) || 0); }, 0) + 1;
     var fila = { fecha: s.fecha, rutina: s.rutina, ejercicio: e.nombre, numero_serie: numero, peso_kg: f.kg, repeticiones: f.reps };
     var record = f.kg > 0 && f.kg > e.record;
     f.estado = "guardando"; guardarSesion(); pintar();
@@ -3099,7 +3101,8 @@
   function buscarRepetidos() {
     var res = { grupos: [], sobran: [], kcal: 0 };
     if (!estado.tablas) return res;
-    ["comidas", "ejercicio", "series_gym"].forEach(function (tabla) {
+    // Las series de gym no se revisan: varias series con el mismo peso y repeticiones son lo normal
+    ["comidas", "ejercicio"].forEach(function (tabla) {
       var porClave = {};
       estado.tablas[tabla].forEach(function (x) {
         if (!x.id || !x.fecha) return;

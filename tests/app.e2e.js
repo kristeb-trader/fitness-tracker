@@ -1007,6 +1007,20 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(nuevas().length, 0);
       assert.strictEqual(await page.locator('.ses-serie.lista').count(), 0);
     });
+    await prueba('series idénticas no se toman por repetidas y la numeración no se repite al borrar una', async () => {
+      const guardar = async (n, total) => { await page.click('[aria-label="Guardar la serie ' + n + '"]'); await page.waitForFunction((k) => document.querySelectorAll('.ses-serie.lista').length === k, total); await page.click('.ses-descanso button:has-text("Seguir")'); };
+      await guardar(1, 1); await guardar(2, 2);
+      await page.click('[role=tab]:has-text("Press banca plano")');
+      page.once('dialog', (d) => d.accept());
+      await page.click('[aria-label="Serie 1 guardada (tocar para borrarla)"]');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 1);
+      await guardar(1, 2);
+      await page.click('[role=tab]:has-text("Press banca plano")');
+      assert.deepStrictEqual(nuevas().map((f) => f[col('series_gym', 'numero_serie')]).sort(), [2, 3], 'sin números repetidos');
+      assert.strictEqual(await page.locator('.banda:has-text("repetidos")').count(), 0);
+      for (const n of [1, 2]) { page.once('dialog', (d) => d.accept()); await page.click('[aria-label="Serie ' + n + ' guardada (tocar para borrarla)"]'); await page.waitForFunction((k) => document.querySelectorAll('.ses-serie.lista').length === k, 2 - n); }
+      assert.strictEqual(nuevas().length, 0);
+    });
     await prueba('«Deshacer serie» en el descanso la quita de tu hoja', async () => {
       await page.click('[aria-label="Guardar la serie 1"]');
       await page.waitForSelector('.ses-descanso.ver');
