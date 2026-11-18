@@ -1888,7 +1888,22 @@
       r.tarjetas.sort(function (a, b) { return (Number(a.orden) || 0) - (Number(b.orden) || 0) || String(a.creado_en || "").localeCompare(String(b.creado_en || "")); });
       r.creado = r.tarjetas.reduce(function (m, t) { var c = String(t.creado_en || ""); return !m || (c && c < m) ? c : m; }, "");
     });
-    return lista2.sort(function (a, b) { return a.creado < b.creado ? -1 : a.creado > b.creado ? 1 : 0; });
+    var orden2 = ordenRutinas();
+    return lista2.sort(function (a, b) {
+      var ia = orden2.indexOf(sinTildes(a.nombre)), ib = orden2.indexOf(sinTildes(b.nombre));
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1; // las que ordenaste van primero; las nuevas, al final
+      if (ib >= 0) return 1;
+      return a.creado < b.creado ? -1 : a.creado > b.creado ? 1 : 0;
+    });
+  }
+  /** Orden elegido para las rutinas (se guarda en este celular). */
+  function ordenRutinas() { try { var o = JSON.parse(leerLocal("orden_rutinas") || "[]"); return Array.isArray(o) ? o : []; } catch (e) { return []; } }
+  function moverRutina(nombre, dir) {
+    var nombres = rutinasAgrupadas().map(function (r) { return sinTildes(r.nombre); }), i = nombres.indexOf(sinTildes(nombre)), j = i + dir;
+    if (i < 0 || j < 0 || j >= nombres.length) return;
+    nombres.splice(j, 0, nombres.splice(i, 1)[0]);
+    guardarLocal("orden_rutinas", JSON.stringify(nombres));
   }
   function rutinaPorNombre(n) {
     var k = sinTildes(n).trim();
@@ -1941,12 +1956,16 @@
       var grupos = [];
       r.tarjetas.forEach(function (t) { infoEjercicio(t.ejercicio).principales.forEach(function (g) { if (grupos.indexOf(g) < 0) grupos.push(g); }); });
       var ultima = r.tarjetas.map(function (t) { var u = ultimoRegistro(t.ejercicio); return u ? u.fecha : ""; }).sort().pop();
-      raiz.appendChild(h("button", { type: "button", class: "rut-card", onclick: function () { estado.rutinaActual = r.nombre; estado.pantalla = "rutina"; pintar(); window.scrollTo(0, 0); } },
+      var pos = rs.indexOf(r);
+      raiz.appendChild(h("div", { class: "rut-fila" }, h("button", { type: "button", class: "rut-card", onclick: function () { estado.rutinaActual = r.nombre; estado.pantalla = "rutina"; pintar(); window.scrollTo(0, 0); } },
         r.tarjetas.length ? miniEjercicio(infoEjercicio(r.tarjetas[0].ejercicio), "rut-mini") : h("span", { class: "rut-mini", text: "🏋️" }),
         h("span", { class: "rut-t" }, h("b", { text: r.nombre }),
           h("small", { text: plural(r.tarjetas.length, "ejercicio", "ejercicios") + (ultima ? " · última vez: " + fechaLarga(ultima).toLowerCase() : "") }),
           h("span", { class: "bib-tags" }, grupos.slice(0, 5).map(function (g) { return h("span", { class: "tag verde", text: GRUPOS[g] }); }))),
-        icono("sig", 16)));
+        icono("sig", 16)),
+        rs.length > 1 ? h("div", { class: "rut-mover" },
+          h("button", { type: "button", "aria-label": "Subir la rutina " + r.nombre, disabled: pos === 0, onclick: function () { moverRutina(r.nombre, -1); pintar(); } }, "↑"),
+          h("button", { type: "button", "aria-label": "Bajar la rutina " + r.nombre, disabled: pos === rs.length - 1, onclick: function () { moverRutina(r.nombre, 1); pintar(); } }, "↓")) : null));
     });
     raiz.appendChild(h("button", { type: "button", class: "nueva-rutina", text: "＋ Nueva rutina", onclick: abrirNuevaRutina }));
   }
@@ -2126,7 +2145,9 @@
       if (sinTildes(n) !== sinTildes(r.nombre) && rutinaPorNombre(n).tarjetas.length) return aviso("Ya tienes una rutina con ese nombre.", true);
       btn.disabled = true; btn.textContent = "Guardando…";
       r.tarjetas.reduce(function (p, t) { return p.then(function () { return actualizarTarjeta(t, { rutina: n }); }); }, Promise.resolve())
-        .then(function () { estado.rutinaActual = n; cerrarHoja(); aviso("Nombre cambiado"); pintar(); }, function (e) { btn.disabled = false; btn.textContent = "Guardar el nombre"; manejarError(e); });
+        .then(function () {
+          var o = ordenRutinas(), k = o.indexOf(sinTildes(r.nombre)); if (k >= 0) { o[k] = sinTildes(n); guardarLocal("orden_rutinas", JSON.stringify(o)); }
+          estado.rutinaActual = n; cerrarHoja(); aviso("Nombre cambiado"); pintar(); }, function (e) { btn.disabled = false; btn.textContent = "Guardar el nombre"; manejarError(e); });
     } });
     var borrarBtn = h("button", { class: "btn peligro", type: "button", text: "Borrar la rutina (" + plural(r.tarjetas.length, "ejercicio", "ejercicios") + ")", onclick: function () {
       if (!confirm("¿Borrar la rutina «" + r.nombre + "»? Tus ejercicios y tus series registradas no se borran.")) return;

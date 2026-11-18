@@ -1138,6 +1138,24 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('text=Para juntarlos, usa «🔗 Unir con otro ejercicio»');
       await page.keyboard.press('Escape');
     });
+    await prueba('ordenar las rutinas con ↑ ↓ y que el orden se mantenga', async () => {
+      s.post({ token: T, accion: 'agregar', tabla: 'rutinas', fila: { rutina: 'Zeta', orden: 1, ejercicio: 'Remo bajo' } });
+      await page.reload();
+      await page.waitForSelector('.hero');
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      const nombres = async () => (await page.locator('.rut-card b').allInnerTexts());
+      const antes = await nombres();
+      assert.strictEqual(antes[antes.length - 1], 'Zeta');
+      await page.click('[aria-label="Subir la rutina Zeta"]');
+      const despues = await nombres();
+      assert.strictEqual(despues[despues.length - 2], 'Zeta');
+      await page.reload();
+      await page.waitForSelector('.hero');
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      assert.deepStrictEqual(await nombres(), despues, 'el orden sigue después de recargar');
+    });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
   }

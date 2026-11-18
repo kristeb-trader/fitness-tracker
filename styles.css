@@ -551,3 +551,9 @@ img.sin-foto { visibility: hidden; }
 .chip-musculo { border: 0; font: inherit; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: var(--lime-soft); color: var(--lime-ink); cursor: pointer; transition: transform .15s; }
 .chip-musculo:active { transform: scale(.95); }
 .cuerpo-fig [data-g]:hover { opacity: .8; }
+
+.rut-fila { display: grid; grid-template-columns: minmax(0, 1fr) 40px; gap: 8px; align-items: stretch; }
+.rut-mover { display: grid; grid-template-rows: 1fr 1fr; gap: 6px; }
+.rut-mover button { border: 0; border-radius: 12px; background: #fff; box-shadow: var(--sombra); font-weight: 800; font-size: 18px; color: var(--verde2); }
+.rut-mover button:active { background: var(--lime-soft); }
+.rut-mover button:disabled { opacity: .3; }
