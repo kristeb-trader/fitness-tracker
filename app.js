@@ -2062,6 +2062,21 @@
     });
     return lineas.join("\n");
   }
+  /** Archivo .fit de la rutina, listo para copiar al reloj. */
+  function archivoGarmin(r) {
+    var ejercicios = r.tarjetas.map(function (t) {
+      var q = equivalenteGarmin(t.ejercicio), o = objetivoTarjeta(t);
+      return { nombre: t.ejercicio, categoria: q.cat, ejercicio: q.ej, series: o.series || 3, reps: o.reps || 10, kg: o.kg || 0 };
+    });
+    var bytes = window.GarminFit.construir({ nombre: r.nombre, ejercicios: ejercicios }, { descansoSerie: DESCANSO_SERIE, descansoEjercicio: DESCANSO_EJERCICIO });
+    var nombre = sinTildes(r.nombre).replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "rutina";
+    return new File([bytes], nombre + ".fit", { type: "application/octet-stream" });
+  }
+  function descargarArchivo(archivo) {
+    var url = URL.createObjectURL(archivo), a = h("a", { href: url, download: archivo.name });
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { a.remove(); URL.revokeObjectURL(url); }, 1500);
+  }
   function abrirGarmin(r) {
     var items = r.tarjetas.map(function (t) { return { t: t, q: equivalenteGarmin(t.ejercicio) }; });
     var cuenta = { ok: 0, cerca: 0, ninguno: 0 };
@@ -2085,7 +2100,24 @@
             h("span", { class: "g-cal g-" + cal[1], text: cal[0] + (q.calidad === "cerca" ? " (otra máquina o variante)" : q.calidad === "ninguno" ? ": usa el más cercano y apunta el peso aquí" : "") })));
       })),
       copiar,
-      h("details", { class: "avanzado" }, h("summary", { text: "Cómo crearla en Garmin Connect (una sola vez)" }),
+      h("details", { class: "avanzado", open: true }, h("summary", { text: "⚡ Lo más rápido: archivo para el reloj" }),
+        h("div", { style: "display:flex;flex-direction:column;gap:8px;margin-top:8px" },
+          h("p", { class: "ayuda", text: "Trae todos los ejercicios de esta rutina ya elegidos, con series, repeticiones, peso y descanso. Lo copias al reloj con el cable y no hay que buscar ni crear nada en Garmin Connect." }),
+          h("button", { class: "btn lima", type: "button", id: "g-descargar", text: "⬇ Descargar el archivo del reloj (.fit)", onclick: function () {
+            try { descargarArchivo(archivoGarmin(r)); aviso("Archivo descargado"); } catch (e) { aviso("No pude crear el archivo: " + e.message, true); }
+          } }),
+          navigator.canShare ? h("button", { class: "btn sec", type: "button", text: "📤 Compartir (correo, Drive, AirDrop…)", onclick: function () {
+            var f = archivoGarmin(r);
+            if (navigator.canShare({ files: [f] })) navigator.share({ files: [f], title: r.nombre }).catch(function () { /* cancelado */ });
+            else { descargarArchivo(f); aviso("Tu celular no permite compartirlo: se descargó"); }
+          } }) : null,
+          h("ol", { class: "pasos" },
+            h("li", { text: "Llévalo a tu computador: abre esta app en el navegador de la computadora y descárgalo ahí, o compártelo desde el celular a tu correo, Drive o WhatsApp y descárgalo en la computadora." }),
+            h("li", { text: "Conecta el Fénix 7 a la computadora con su cable USB. Aparece como una unidad (como una memoria USB)." }),
+            h("li", { text: "Abre la unidad → carpeta GARMIN → carpeta NewFiles, y pega el archivo .fit." }),
+            h("li", { text: "Expulsa el reloj y desconéctalo. En el reloj, entra a Entrenamientos y busca «" + r.nombre + "»." }),
+            h("li", { text: "Pruébalo con una sola rutina. Si no aparece o algún ejercicio sale raro, dime y lo ajusto." })))),
+      h("details", { class: "avanzado" }, h("summary", { text: "Alternativa: crearla a mano en Garmin Connect" }),
         h("ol", { class: "pasos" },
           h("li", { text: "Abre Garmin Connect en el celular → Más (☰) → Entrenamiento y planificación → Entrenamientos." }),
           h("li", { text: "Crear un entrenamiento → elige Fuerza y ponle el nombre «" + r.nombre + "»." }),

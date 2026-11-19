@@ -1067,8 +1067,14 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const t = await page.innerText('dialog');
       assert.ok(t.includes('Press banca plano') && t.includes('Bench Press › Barbell Bench Press'), t);
       assert.ok(t.includes('Remo bajo') && t.includes('Row › Seated Cable Row') && t.includes('2 series × 12 reps · 40 kg'), t);
-      assert.ok(t.includes('✓ 2 iguales') && t.includes('Cómo crearla en Garmin Connect'), t);
+      assert.ok(t.includes('✓ 2 iguales') && t.includes('Lo más rápido: archivo para el reloj'), t);
       if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'garmin.png') });
+      const [descarga] = await Promise.all([page.waitForEvent('download'), page.click('#g-descargar')]);
+      assert.ok(/\.fit$/.test(descarga.suggestedFilename()), descarga.suggestedFilename());
+      const ruta = await descarga.path();
+      const bytes = fs.readFileSync(ruta);
+      assert.strictEqual(bytes.slice(8, 12).toString(), '.FIT');
+      assert.ok(bytes.length > 100);
       await page.keyboard.press('Escape');
     });
     await prueba('«Cancelar entreno» borra las series que guardaste en él', async () => {
