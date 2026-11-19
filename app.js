@@ -1343,6 +1343,7 @@
     d.s = d.s.filter(function (g) { return d.p.indexOf(g) < 0; });
     d.equipo = (fila && fila.equipo) || (ficha ? ficha.eq : null);
     d.nivel = ficha ? ficha.niv : null;
+    d.garmin = ficha && ficha.g ? ficha.g : null;
     var propios = fila && fila.pasos ? String(fila.pasos).split(/\n+/).map(function (x) { return x.replace(/^\s*\d+[.)-]?\s*/, "").trim(); }).filter(Boolean) : null;
     d.pasos = propios || (ficha ? ficha.pasos : []);
     d.pasosPropios = !!propios;
@@ -1999,6 +2000,7 @@
       if (estado.sesion && !confirm("Tienes otro entreno en curso (" + estado.sesion.rutina + "). ¿Terminarlo y empezar este? Las series que ya guardaste no se borran.")) return;
       empezarEntreno(r);
     } }));
+    if (r.tarjetas.length) raiz.appendChild(h("button", { type: "button", class: "btn sec btn-garmin", text: "⌚ Pasar al Garmin", onclick: function () { abrirGarmin(r); } }));
     r.tarjetas.forEach(function (t, i) {
       var info = infoEjercicio(t.ejercicio), u = ultimoRegistro(t.ejercicio);
       var meta = [];
@@ -2032,6 +2034,67 @@
     raiz.appendChild(navegacion("entreno"));
   }
 
+  // ---------- Pasar una rutina al reloj Garmin ----------
+  // Garmin no deja enviar la rutina a su app desde fuera: se crea una vez en Garmin Connect y de ahí pasa al reloj.
+  // Cada ejercicio se traduce al ejercicio equivalente del catálogo oficial de Garmin (FIT SDK).
+  var CATEGORIA_GARMIN = { benchPress: "Press de banca", calfRaise: "Pantorrillas", core: "Core", crunch: "Abdominales (crunch)", curl: "Curl de bíceps", deadlift: "Peso muerto", flye: "Aperturas", hipRaise: "Elevación de cadera",
+    hipStability: "Estabilidad de cadera", hyperextension: "Hiperextensión", lateralRaise: "Elevación lateral", legCurl: "Curl femoral", legRaise: "Elevación de piernas", lunge: "Zancada", plank: "Plancha", pullUp: "Dominadas y jalones",
+    pushUp: "Flexiones", row: "Remo", shoulderPress: "Press de hombro", shrug: "Encogimientos", sitUp: "Abdominales (sit-up)", squat: "Sentadilla y prensa", tricepsExtension: "Tríceps" };
+  function nombreGarmin(clave) { return clave.replace(/([a-z])([A-Z0-9])/g, "$1 $2").replace(/^./, function (c) { return c.toUpperCase(); }); }
+  function equivalenteGarmin(nombre) {
+    var d = datosEjercicio(nombre), g = d.garmin;
+    if (!g) return { cat: null, ej: null, calidad: "ninguno", sinFicha: true };
+    return { cat: g[0], ej: g[1], calidad: g[2], catEs: CATEGORIA_GARMIN[g[0]] || nombreGarmin(g[0]), ejEn: nombreGarmin(g[1]), catEn: nombreGarmin(g[0]) };
+  }
+  var CALIDAD_GARMIN = { ok: ["✓ Igual en Garmin", "ok"], cerca: ["≈ Parecido en Garmin", "cerca"], ninguno: ["⚠ Sin equivalente exacto", "ninguno"] };
+  /** Series, repeticiones y peso de una tarjeta; lo que falte, de la última vez que lo hiciste. */
+  function objetivoTarjeta(t) {
+    var u = ultimoRegistro(t.ejercicio), mejor = u ? mejorSerie(u) : null;
+    return { series: Number(t.series) || (u ? u.series.length : 0) || null, reps: Number(t.repeticiones) || (mejor ? Number(mejor.repeticiones) : 0) || null,
+      kg: !vacio(t.peso_kg) ? Number(t.peso_kg) : mejor && Number(mejor.peso_kg) ? Number(mejor.peso_kg) : null };
+  }
+  function textoObjetivo(o) { return (o.series || "?") + " series × " + (o.reps || "?") + " reps" + (o.kg ? " · " + fmt(o.kg, 1) + " kg" : ""); }
+  function textoGarmin(r) {
+    var lineas = ["Rutina: " + r.nombre, ""];
+    r.tarjetas.forEach(function (t, i) {
+      var q = equivalenteGarmin(t.ejercicio), o = objetivoTarjeta(t), serie = (o.series || "?") + " × " + (o.reps || "?") + (o.kg ? " · " + fmt(o.kg, 1) + " kg" : "");
+      lineas.push((i + 1) + ". " + t.ejercicio + " → " + (q.cat ? q.catEn + " › " + q.ejEn + (q.calidad === "cerca" ? " (parecido)" : q.calidad === "ninguno" ? " (el más cercano; Garmin no tiene este)" : "") : "elige el más parecido") + " · " + serie);
+    });
+    return lineas.join("\n");
+  }
+  function abrirGarmin(r) {
+    var items = r.tarjetas.map(function (t) { return { t: t, q: equivalenteGarmin(t.ejercicio) }; });
+    var cuenta = { ok: 0, cerca: 0, ninguno: 0 };
+    items.forEach(function (x) { cuenta[x.q.calidad]++; });
+    var copiar = h("button", { class: "btn lima", type: "button", text: "Copiar la lista", onclick: function () { copiarTexto(textoGarmin(r), h("textarea", { hidden: true }), "Lista copiada. Pégala en las notas de tu celular."); } });
+    abrirHoja("⌚ " + r.nombre + " en Garmin", h("div", { class: "garmin" },
+      h("p", { class: "ayuda", text: "Garmin no deja mandar la rutina desde otra app. Se crea una sola vez en Garmin Connect y de ahí se sincroniza con tu Fénix 7. Cada ejercicio de abajo ya está traducido al del catálogo oficial de Garmin." }),
+      h("div", { class: "garmin-res" },
+        h("span", { class: "g-ok", text: "✓ " + cuenta.ok + " igual" + (cuenta.ok === 1 ? "" : "es") }),
+        h("span", { class: "g-cerca", text: "≈ " + cuenta.cerca + " parecido" + (cuenta.cerca === 1 ? "" : "s") }),
+        cuenta.ninguno ? h("span", { class: "g-ninguno", text: "⚠ " + cuenta.ninguno + " sin equivalente" }) : null),
+      h("div", { class: "lista" }, items.map(function (x, i) {
+        var t = x.t, q = x.q, cal = CALIDAD_GARMIN[q.calidad];
+        return h("div", { class: "g-fila" },
+          h("span", { class: "g-n", text: String(i + 1) }),
+          h("div", { class: "g-t" },
+            h("b", { text: t.ejercicio }),
+            q.cat ? h("span", { class: "g-gar" }, "En Garmin: ", h("b", { text: q.catEn + " › " + q.ejEn })) : h("span", { class: "g-gar", text: "No lo reconocí: en Garmin elige el más parecido." }),
+            q.cat ? h("small", { text: "Categoría en español: " + q.catEs }) : null,
+            h("span", { class: "g-meta num", text: textoObjetivo(objetivoTarjeta(t)) + " · descanso 1:30" }),
+            h("span", { class: "g-cal g-" + cal[1], text: cal[0] + (q.calidad === "cerca" ? " (otra máquina o variante)" : q.calidad === "ninguno" ? ": usa el más cercano y apunta el peso aquí" : "") })));
+      })),
+      copiar,
+      h("details", { class: "avanzado" }, h("summary", { text: "Cómo crearla en Garmin Connect (una sola vez)" }),
+        h("ol", { class: "pasos" },
+          h("li", { text: "Abre Garmin Connect en el celular → Más (☰) → Entrenamiento y planificación → Entrenamientos." }),
+          h("li", { text: "Crear un entrenamiento → elige Fuerza y ponle el nombre «" + r.nombre + "»." }),
+          h("li", { text: "Agrega cada ejercicio en el orden de la lista: busca la categoría y el ejercicio en inglés tal como aparece arriba." }),
+          h("li", { text: "En cada uno pon las series y las repeticiones. El peso es opcional: puedes dejarlo para anotarlo en el reloj." }),
+          h("li", { text: "Guarda y toca «Enviar al dispositivo» (Fénix 7). Sincroniza el reloj y la encuentras en Entrenamientos → Fuerza." }),
+          h("li", { text: "Al terminar en el reloj, vuelves aquí y registras lo que levantaste en ▶ Empezar entreno." })),
+        h("p", { class: "ayuda", text: "Los nombres de los menús de Garmin pueden cambiar un poco según tu versión de la app." }))));
+  }
   function camposPeso(valores) {
     var peso = h("input", { id: "f-tar-peso", type: "number", inputmode: "decimal", min: 0, max: 1000, step: "0.5", value: vacio(valores.peso_kg) ? "" : valores.peso_kg, "aria-label": "Peso en kg" });
     var series = h("input", { id: "f-tar-series", type: "number", inputmode: "numeric", min: 1, max: 50, value: valores.series || "", "aria-label": "Series" });

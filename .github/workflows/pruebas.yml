@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: 22
       - name: Servicio de Google (apps-script/Code.gs)
-        run: node tests/servicio.test.js
+        run: node tests/servicio.test.js && node tests/garmin.test.js
       - name: Instalar navegador de pruebas
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1

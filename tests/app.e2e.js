@@ -1058,6 +1058,19 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(await page.locator('.banda-entreno').count(), 0, 'ya no hay entreno en curso');
       assert.strictEqual(await page.evaluate(() => localStorage.getItem('sesion_entreno')), null);
     });
+    await prueba('«Pasar al Garmin»: cada ejercicio con su equivalente del catálogo de Garmin', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      await page.click('.rut-card');
+      await page.click('button:has-text("⌚ Pasar al Garmin")');
+      await page.waitForSelector('dialog .g-fila');
+      const t = await page.innerText('dialog');
+      assert.ok(t.includes('Press banca plano') && t.includes('Bench Press › Barbell Bench Press'), t);
+      assert.ok(t.includes('Remo bajo') && t.includes('Row › Seated Cable Row') && t.includes('2 series × 12 reps · 40 kg'), t);
+      assert.ok(t.includes('✓ 2 iguales') && t.includes('Cómo crearla en Garmin Connect'), t);
+      if (CAPTURAS) await page.screenshot({ path: path.join(CAPTURAS, 'garmin.png') });
+      await page.keyboard.press('Escape');
+    });
     await prueba('«Cancelar entreno» borra las series que guardaste en él', async () => {
       const antes = nuevas().length;
       await page.click('.nav [aria-label="Entreno"]');
