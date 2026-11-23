@@ -1165,6 +1165,36 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog button:has-text("Cancelar entreno")');
       await page.waitForSelector('text=Entreno cancelado');
     });
+    await prueba('«Guardar en la rutina» pasa a la rutina lo que ajustaste en el entreno', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      await page.click('.rut-card');
+      await page.click('button:has-text("▶ Empezar entreno")');
+      await page.waitForSelector('.ses-barra');
+      await page.locator('[aria-label="peso de la serie 1"]').fill('55'); await page.locator('[aria-label="peso de la serie 1"]').press('Enter');
+      await page.click('button:has-text("＋ Agregar serie")');
+      let pregunta = '';
+      page.once('dialog', (d) => { pregunta = d.message(); d.accept(); });
+      await page.click('button:has-text("💾 Guardar en la rutina")');
+      await page.waitForSelector('text=Rutina actualizada');
+      assert.ok(pregunta.includes('3 × 12 · 55 kg') && pregunta.includes('Reemplaza'), pregunta);
+      const fila = s.hojas.rutinas.filas.slice(1).find((f) => f[col('rutinas', 'ejercicio')] === 'Press banca plano');
+      assert.strictEqual(fila[col('rutinas', 'peso_kg')], 55); assert.strictEqual(fila[col('rutinas', 'series')], 3); assert.strictEqual(fila[col('rutinas', 'repeticiones')], 12);
+      // un ejercicio que no estaba en la rutina se agrega
+      await page.click('button:has-text("＋ Agregar otro ejercicio al entreno")');
+      await page.fill('#f-buscar-elegir', 'martillo');
+      await page.click('dialog .elegir-op[aria-label="Curl martillo"]');
+      await page.waitForSelector('.ses-ej-cab h2:text-is("Curl martillo")');
+      page.once('dialog', (d) => { pregunta = d.message(); d.accept(); });
+      await page.click('button:has-text("💾 Guardar en la rutina")');
+      await page.waitForSelector('text=Agregado a la rutina');
+      assert.ok(pregunta.includes('no está en la rutina'), pregunta);
+      assert.ok(s.hojas.rutinas.filas.slice(1).some((f) => f[col('rutinas', 'ejercicio')] === 'Curl martillo' && f[col('rutinas', 'rutina')] === RUT));
+      await page.click('.ses-terminar');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Cancelar entreno")');
+      await page.waitForSelector('text=Entreno cancelado');
+    });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();
   }

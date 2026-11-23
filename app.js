@@ -2395,7 +2395,8 @@
           for (var k = e.filas.length - 1; k >= 0; k--) if (e.filas[k].estado !== "ok" && e.filas[k].estado !== "guardando") { e.filas.splice(k, 1); break; }
           guardarSesion(); pintar();
         } })),
-      h("button", { type: "button", class: "btn sec", text: "✎ Cambiar o quitar este ejercicio", onclick: function () { abrirEditarEjercicioSesion(s, e); } })));
+      h("button", { type: "button", class: "btn sec", text: "✎ Cambiar o quitar este ejercicio", onclick: function () { abrirEditarEjercicioSesion(s, e); } }),
+      h("button", { type: "button", class: "btn sec", text: "💾 Guardar en la rutina", onclick: function () { guardarEnRutina(s, e); } })));
     raiz.appendChild(h("button", { type: "button", class: "btn sec", text: "＋ Agregar otro ejercicio al entreno", onclick: function () {
       elegirEjercicio("Agregar al entreno", function (n) {
         s.ejercicios.push(ejercicioDeSesion(n)); s.actual = s.ejercicios.length - 1; guardarSesion(); precargarFotosSesion(s); pintar(); window.scrollTo(0, 0);
@@ -2406,6 +2407,27 @@
   }
 
   /** Peso o repeticiones: se pueden digitar (toca el número) o subir y bajar con − / +. */
+  /** Pasa a la rutina lo que ajustaste en el entreno: series, y peso y repeticiones de tu serie más pesada. */
+  function guardarEnRutina(s, e) {
+    var r = rutinaPorNombre(s.rutina);
+    if (!r.tarjetas.length) return aviso("La rutina «" + s.rutina + "» ya no existe. Créala de nuevo en Entreno → Rutinas.", true);
+    if (!e.filas.length) return aviso("Este ejercicio no tiene series.", true);
+    var ref = e.filas.reduce(function (m, f) { return f.kg >= m.kg ? f : m; }, e.filas[0]);
+    var datos = { series: e.filas.length, repeticiones: ref.reps, peso_kg: ref.kg || null };
+    var t = r.tarjetas.filter(function (x) { return claveEj(x.ejercicio) === claveEj(e.nombre); })[0];
+    var resumen = datos.series + " × " + datos.repeticiones + (datos.peso_kg ? " · " + fmt(datos.peso_kg, 1) + " kg" : "");
+    var pregunta = t
+      ? "¿Guardar " + resumen + " en «" + e.nombre + "» de la rutina «" + r.nombre + "»? Reemplaza " + textoObjetivo({ series: Number(t.series) || null, reps: Number(t.repeticiones) || null, kg: vacio(t.peso_kg) ? null : Number(t.peso_kg) }) + "."
+      : "«" + e.nombre + "» no está en la rutina «" + r.nombre + "». ¿Agregarlo con " + resumen + "?";
+    if (!confirm(pregunta)) return;
+    var trabajo = t ? actualizarTarjeta(t, datos) : api("agregar", { tabla: "rutinas", fila: Object.assign({ rutina: r.nombre, orden: r.tarjetas.reduce(function (m, x) { return Math.max(m, Number(x.orden) || 0); }, 0) + 1, ejercicio: e.nombre }, datos) })
+      .then(function (res) { estado.tablas.rutinas.push(Object.assign({ id: res.id, creado_en: new Date().toISOString(), rutina: r.nombre, ejercicio: e.nombre }, datos)); guardarCache(); });
+    trabajo.then(function () {
+      e.meta = { series: datos.series, reps: datos.repeticiones, kg: datos.peso_kg }; guardarSesion();
+      aviso(t ? "Rutina actualizada: " + e.nombre + " · " + resumen : "Agregado a la rutina: " + e.nombre + " · " + resumen);
+      if (estado.pantalla === "sesion") pintar();
+    }, manejarError);
+  }
   /** Un ejercicio nuevo dentro del entreno (series, repeticiones y peso de la última vez). */
   function ejercicioDeSesion(nombre) {
     var o = objetivoTarjeta({ ejercicio: nombre }), u = ultimoRegistro(nombre), filas = [];
