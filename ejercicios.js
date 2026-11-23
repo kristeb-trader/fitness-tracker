@@ -189,7 +189,7 @@ window.BIBLIOTECA_EJ = [
     t: "Dorsales", tb: "Bíceps",
     pasos: ["Siéntate con los muslos bajo los cojines y toma el agarre cerrado.", "Inclínate un poco hacia atrás con el pecho arriba.", "Jala hacia la parte alta del pecho, llevando los codos hacia abajo.", "Sube despacio hasta estirar los brazos."],
     tip: "Imagina que llevas los codos a los bolsillos." },
-  { f: "Wide-Grip_Lat_Pulldown", n: "Jalón al frente", g: ["pullUp", "latPulldown", "ok"], re: /jalon|pulldown|polea al pecho/, p: ["espalda"], s: ["biceps"], eq: "polea", niv: "principiante",
+  { f: "Wide-Grip_Lat_Pulldown", n: "Jalón al frente", g: ["pullUp", "wideGripLatPulldown", "ok"], re: /jalon|pulldown|polea al pecho/, p: ["espalda"], s: ["biceps"], eq: "polea", niv: "principiante",
     t: "Dorsales (el músculo ancho de la espalda)", tb: "Bíceps · espalda media",
     pasos: ["Siéntate con los muslos asegurados bajo los cojines.", "Toma la barra con las manos más abiertas que los hombros.", "Jala la barra hacia la parte alta del pecho, sacando pecho.", "Sube despacio hasta estirar los brazos."],
     tip: "No jales detrás de la nuca ni te balancees." },
