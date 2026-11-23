@@ -2040,7 +2040,11 @@
   var CATEGORIA_GARMIN = { benchPress: "Press de banca", calfRaise: "Pantorrillas", core: "Core", crunch: "Abdominales (crunch)", curl: "Curl de bíceps", deadlift: "Peso muerto", flye: "Aperturas", hipRaise: "Elevación de cadera",
     hipStability: "Estabilidad de cadera", hyperextension: "Hiperextensión", lateralRaise: "Elevación lateral", legCurl: "Curl femoral", legRaise: "Elevación de piernas", lunge: "Zancada", plank: "Plancha", pullUp: "Dominadas y jalones",
     pushUp: "Flexiones", row: "Remo", shoulderPress: "Press de hombro", shrug: "Encogimientos", sitUp: "Abdominales (sit-up)", squat: "Sentadilla y prensa", tricepsExtension: "Tríceps" };
-  function nombreGarmin(clave) { return clave.replace(/([a-z])([A-Z0-9])/g, "$1 $2").replace(/^./, function (c) { return c.toUpperCase(); }); }
+  /** Nombre como lo escribe Garmin Connect (con guiones: Pull-down, Pull-up, Ez Bar → EZ Bar). */
+  function nombreGarmin(clave) {
+    return clave.replace(/([a-z])([A-Z0-9])/g, "$1 $2").replace(/^./, function (c) { return c.toUpperCase(); })
+      .replace(/Pulldown/g, "Pull-down").replace(/Pull Up/g, "Pull-up").replace(/Pressdown/g, "Press-down").replace(/\bEz Bar\b/g, "EZ Bar").replace(/\bV Grip\b/g, "V-grip");
+  }
   function equivalenteGarmin(nombre) {
     var d = datosEjercicio(nombre), g = d.garmin;
     if (!g) return { cat: null, ej: null, calidad: "ninguno", sinFicha: true };
