@@ -830,7 +830,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       const card = page.locator('.tarjeta-ej >> nth=1');
       assert.ok((await card.locator('.tar-foto img >> nth=0').getAttribute('src')).endsWith('Leverage_Incline_Chest_Press/0.jpg'));
       const t = await card.innerText();
-      assert.ok(t.includes('25 kg') && t.includes('Pecho') && t.includes('Ejercicio') && t.includes('Peso y series'), t);
+      assert.ok(t.includes('25 kg') && t.includes('Pecho') && t.includes('Ejercicio') && t.includes('Editar'), t);
       if (CAPTURAS) { await page.waitForTimeout(2000); await page.screenshot({ path: path.join(CAPTURAS, 'rutina.png'), fullPage: true }); }
     });
     await prueba('ordenar con las flechas', async () => {
@@ -859,11 +859,25 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForFunction(() => [...document.querySelectorAll('.tar-foto img')].filter((i) => i.src.startsWith('data:image/jpeg')).length === 2);
     });
     await prueba('«Peso y series» cambia solo eso', async () => {
-      await page.click('[aria-label="Peso y series de Press banca plano"]');
+      await page.click('[aria-label="Editar la tarjeta de Press banca plano"]');
       await page.fill('#f-tar-peso', '42.5');
       await page.click('dialog button:text-is("Guardar")');
       await page.waitForFunction(() => document.body.innerText.includes('42,5 kg'));
       assert.strictEqual(s.hojas.rutinas.filas.find((f) => f[col('rutinas', 'ejercicio')] === 'Press banca plano')[col('rutinas', 'peso_kg')], 42.5);
+    });
+    await prueba('«Editar» una tarjeta: cambiar el ejercicio por otro y volver a ponerlo', async () => {
+      await page.click('[aria-label="Editar la tarjeta de Press banca plano"]');
+      await page.click('dialog button:has-text("Cambiar por otro ejercicio")');
+      await page.fill('#f-buscar-elegir', 'jalon');
+      await page.click('dialog .elegir-op[aria-label="Jalón al frente"]');
+      await page.waitForSelector('.tarjeta-ej b:text-is("Jalón al frente")');
+      assert.strictEqual(s.hojas.rutinas.filas.slice(1).filter((f) => f[col('rutinas', 'ejercicio')] === 'Jalón al frente').length, 1);
+      assert.strictEqual(s.hojas.rutinas.filas.slice(1).find((f) => f[col('rutinas', 'ejercicio')] === 'Jalón al frente')[col('rutinas', 'peso_kg')], 42.5, 'conserva el peso y las series');
+      await page.click('[aria-label="Editar la tarjeta de Jalón al frente"]');
+      await page.click('dialog button:has-text("Cambiar por otro ejercicio")');
+      await page.fill('#f-buscar-elegir', 'banca plano');
+      await page.click('dialog .elegir-op[aria-label="Press banca plano"]');
+      await page.waitForSelector('.tarjeta-ej b:text-is("Press banca plano")');
     });
     await prueba('editar el ejercicio (volver a la foto automática) cambia la rutina y borra tus fotos', async () => {
       await page.click('[aria-label="Ver el ejercicio Press banca plano"]');
@@ -967,10 +981,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     });
     await prueba('cada serie viene con el peso y las repeticiones de la rutina; − / + los cambian', async () => {
       const fila = page.locator('.ses-serie >> nth=0');
-      assert.deepStrictEqual(await fila.locator('output').allInnerTexts(), ['40\nkg', '12\nreps']);
+      assert.deepStrictEqual(await fila.locator('input').evaluateAll((l) => l.map((x) => x.value)), ['40', '12']);
       for (let i = 0; i < 3; i++) await page.click('[aria-label="Más peso de la serie 1"]');
       await page.click('[aria-label="Menos repeticiones de la serie 1"]');
-      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('output').allInnerTexts(), ['47,5\nkg', '11\nreps']);
+      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('input').evaluateAll((l) => l.map((x) => x.value)), ['47,5', '11']);
     });
     await prueba('✓ guarda la serie en la hoja al instante, avisa el récord y empieza el descanso', async () => {
       await page.click('[aria-label="Guardar la serie 1"]');
@@ -1021,6 +1035,34 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       for (const n of [1, 2]) { page.once('dialog', (d) => d.accept()); await page.click('[aria-label="Serie ' + n + ' guardada (tocar para borrarla)"]'); await page.waitForFunction((k) => document.querySelectorAll('.ses-serie.lista').length === k, 2 - n); }
       assert.strictEqual(nuevas().length, 0);
     });
+    await prueba('el peso y las repeticiones se pueden digitar (con coma) y no aceptan valores inválidos', async () => {
+      const peso = page.locator('[aria-label="peso de la serie 2"]'), reps = page.locator('[aria-label="repeticiones de la serie 2"]');
+      await peso.fill('52,5'); await peso.press('Enter');
+      await reps.fill('9'); await reps.press('Enter');
+      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=1').locator('input').evaluateAll((l) => l.map((x) => x.value)), ['52,5', '9']);
+      const guardada = JSON.parse(await page.evaluate(() => localStorage.getItem('sesion_entreno')));
+      assert.strictEqual(guardada.ejercicios[0].filas[1].kg, 52.5); assert.strictEqual(guardada.ejercicios[0].filas[1].reps, 9);
+      await peso.fill('abc'); await peso.press('Enter');
+      assert.strictEqual(await peso.inputValue(), '52,5', 'vuelve al valor anterior');
+      await page.click('[aria-label="Guardar la serie 2"]');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 1);
+      const fila = nuevas().find((f) => f[col('series_gym', 'peso_kg')] === 52.5);
+      assert.ok(fila && fila[col('series_gym', 'repeticiones')] === 9, 'se guarda lo que escribiste');
+      await page.click('.ses-descanso button:has-text("Seguir")');
+      page.once('dialog', (d) => d.accept());
+      await page.click('[aria-label="Serie 2 guardada (tocar para borrarla)"]');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-serie.lista').length === 0);
+    });
+    await prueba('quitar y agregar series dentro del entreno', async () => {
+      assert.strictEqual(await page.locator('.ses-serie').count(), 2);
+      await page.click('button:has-text("− Quitar serie")');
+      assert.strictEqual(await page.locator('.ses-serie').count(), 1);
+      await page.click('button:has-text("＋ Agregar serie")');
+      await page.click('button:has-text("＋ Agregar serie")');
+      assert.strictEqual(await page.locator('.ses-serie').count(), 3);
+      await page.click('button:has-text("− Quitar serie")');
+      assert.strictEqual(await page.locator('.ses-serie').count(), 2);
+    });
     await prueba('«Deshacer serie» en el descanso la quita de tu hoja', async () => {
       await page.click('[aria-label="Guardar la serie 1"]');
       await page.waitForSelector('.ses-descanso.ver');
@@ -1041,7 +1083,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.ses-descanso button:has-text("Seguir")');
       await page.waitForSelector('.ses-ej-cab h2:text-is("Remo bajo")');
       assert.strictEqual(await page.locator('.ses-serie').count(), 2, 'tantas series como la última vez');
-      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('output').allInnerTexts(), ['45\nkg', '12\nreps']);
+      assert.deepStrictEqual(await page.locator('.ses-serie >> nth=0').locator('input').evaluateAll((l) => l.map((x) => x.value)), ['45', '12']);
       const n = nuevas().map((f) => f[col('series_gym', 'numero_serie')]);
       assert.deepStrictEqual(n, [1, 2]);
     });
@@ -1094,6 +1136,34 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.strictEqual(nuevas().length, antes, 'la serie de este entreno se borró; las de antes siguen');
       assert.strictEqual(await page.evaluate(() => localStorage.getItem('sesion_entreno')), null);
       await page.waitForSelector('button:has-text("▶ Empezar entreno")');
+    });
+    await prueba('dentro del entreno: cambiar un ejercicio, agregar otro y quitarlo', async () => {
+      await page.click('.nav [aria-label="Entreno"]');
+      await page.click('.seg button:has-text("Rutinas")');
+      await page.click('.rut-card');
+      await page.click('button:has-text("▶ Empezar entreno")');
+      await page.waitForSelector('.ses-barra');
+      assert.strictEqual(await page.locator('.ses-fichas [role=tab]').count(), 2);
+      await page.click('.ses-fichas [role=tab]:has-text("Remo bajo")');
+      await page.click('button:has-text("✎ Cambiar o quitar este ejercicio")');
+      await page.click('dialog button:has-text("Cambiar por otro ejercicio")');
+      await page.fill('#f-buscar-elegir', 'jalon al');
+      await page.click('dialog .elegir-op[aria-label="Jalón al frente"]');
+      await page.waitForSelector('.ses-ej-cab h2:text-is("Jalón al frente")');
+      assert.strictEqual(await page.locator('.ses-fichas [role=tab]').count(), 2, 'se cambió, no se agregó');
+      await page.click('button:has-text("＋ Agregar otro ejercicio al entreno")');
+      await page.fill('#f-buscar-elegir', 'martillo');
+      await page.click('dialog .elegir-op[aria-label="Curl martillo"]');
+      await page.waitForSelector('.ses-ej-cab h2:text-is("Curl martillo")');
+      assert.strictEqual(await page.locator('.ses-fichas [role=tab]').count(), 3);
+      await page.click('button:has-text("✎ Cambiar o quitar este ejercicio")');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Quitar del entreno")');
+      await page.waitForFunction(() => document.querySelectorAll('.ses-fichas [role=tab]').length === 2);
+      await page.click('.ses-terminar');
+      page.once('dialog', (d) => d.accept());
+      await page.click('dialog button:has-text("Cancelar entreno")');
+      await page.waitForSelector('text=Entreno cancelado');
     });
     await prueba('sin errores en la consola', async () => assert.deepStrictEqual(errores, []));
     await cerrar();

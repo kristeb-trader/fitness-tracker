@@ -580,3 +580,12 @@ img.sin-foto { visibility: hidden; }
 .g-cal.g-ok { background: var(--lime-soft); color: var(--lime-ink); }
 .g-cal.g-cerca { background: #FFF1C7; color: #6B4600; }
 .g-cal.g-ninguno { background: #FCE4E0; color: #8A1C12; }
+
+/* Modo entreno: valores que se pueden digitar */
+.ses-valor { display: grid; justify-items: center; margin: 0; padding: 0; font-size: inherit; color: inherit; min-width: 0; }
+.ses-input { width: 100%; min-width: 0; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; text-align: center; font-weight: 800; font-size: 16px; line-height: 1; color: var(--ink); min-height: 0; }
+.ses-input:focus { outline: 2px solid var(--verde); background: #fff; }
+.ses-input:disabled { opacity: 1; color: var(--ink); -webkit-text-fill-color: var(--ink); }
+.ses-valor small { display: block; font-size: 10px; color: var(--sub); font-weight: 700; margin-top: -1px; }
+.ses-acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ses-mas:disabled { opacity: .35; }
