@@ -38,7 +38,7 @@ async function abrir(configJs, servicios) {
   const servidor = servidorEstatico(configJs);
   await new Promise((r) => servidor.listen(0, r));
   const navegador = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-  const contexto = await navegador.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'es-ES', permissions: ['clipboard-read', 'clipboard-write'] });
+  const contexto = await navegador.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'es-ES', reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await contexto.newPage();
   const errores = [];
   page.on('pageerror', (e) => errores.push('pageerror: ' + e.message));
@@ -516,7 +516,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.titulo:has-text("Entreno")');
       const kp = await page.innerText('.kp-ent');
       assert.ok(kp.includes('2.314') && kp.includes('kg levantados'), kp);
-      assert.ok((await page.innerText('.racha')).includes('🔥 2 días'));
+      assert.ok((await page.innerText('.racha')).includes('2 días'));
     });
     await prueba('músculos trabajados: figura de frente y espalda, con espalda y bíceps', async () => {
       assert.strictEqual(await page.locator('.cuerpo-fig svg').count(), 2);
@@ -549,8 +549,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok((await page.locator('dialog.visor img').getAttribute('src')).endsWith('/0.jpg'), 'tocar la foto cambia de posición');
       await page.click('dialog.visor [aria-label="Cerrar"]');
       await page.waitForFunction(() => !document.querySelector('dialog.visor'));
+      await card.locator('.ej-t').click();
+      await card.locator('.ej-cuerpo table').waitFor();
       const t = await card.innerText();
-      assert.ok(t.includes('🏆 Récord: 50 kg') && t.includes('▲ 5 kg') && t.includes('Volumen 1.330 kg') && /% vs el/.test(t), t);
+      assert.ok(t.includes('Récord: 50 kg') && t.includes('▲ 5 kg') && t.includes('Volumen 1.330 kg') && /% vs el/.test(t), t);
       assert.ok((await page.innerText('.ej:has(b:text-is("Curl martillo"))')).includes('Bíceps'));
     });
     await prueba('«Cristos Invertidos En Maquina» (nombre de Smart Fit) usa la foto de la máquina, no la de mancuernas', async () => {
@@ -560,7 +562,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('historial del ejercicio con su gráfica', async () => {
       await page.click('[aria-label="Historial de Jalón al frente"]');
       await page.waitForSelector('dialog >> text=2 sesiones');
-      assert.ok((await page.innerText('dialog')).includes('🏆 récord'));
+      assert.ok((await page.innerText('dialog')).includes('récord'));
       await page.keyboard.press('Escape');
     });
     await prueba('cardio: distancia y desnivel sacados de las notas de Strava', async () => {
@@ -576,7 +578,9 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.hero-ent .hero-t:has-text("Esta semana")');
     });
     await prueba('cambiar el nombre de un ejercicio en todas sus series corrige la foto', async () => {
-      await page.locator('.ej:has(b:text-is("Curl martillo")) .ej-editar:not(.ej-como)').click();
+      const curl = page.locator('.ej:has(b:text-is("Curl martillo"))');
+      await curl.locator('.ej-t').click();
+      await curl.locator('.ej-editar:has-text("Editar")').click();
       await page.locator('dialog summary:has-text("La foto no es la correcta")').click();
       await page.fill('#f-nuevo-nombre', 'Cristos Invertidos En Maquina');
       page.once('dialog', (d) => d.accept());
@@ -616,6 +620,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok(src.endsWith('Ab_Crunch_Machine/0.jpg'), 'la foto elegida se usa en Entreno: ' + src);
     });
     await prueba('«Quitar mis cambios» vuelve a la foto de la biblioteca', async () => {
+      await page.locator('.ej:has(b:text-is("Remo bajo")) .ej-t').click();
       await page.click('[aria-label="Cómo se hace Remo bajo"]');
       await page.click('dialog button:has-text("Editar ejercicio")');
       page.once('dialog', (d) => d.accept());
@@ -664,10 +669,10 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('.bib-card:has(b:text-is("Jalón al frente"))');
       await page.waitForSelector('dialog .ficha');
       assert.ok((await page.locator('dialog .ficha-foto img').nth(1).getAttribute('src')).endsWith('Wide-Grip_Lat_Pulldown/1.jpg'));
-      assert.strictEqual(await page.locator('dialog .ficha svg').count(), 2, 'figura de frente y espalda');
+      assert.strictEqual(await page.locator('dialog .ficha svg[role="img"]').count(), 2, 'figura de frente y espalda');
       assert.ok(await page.locator('dialog .pasos li').count() >= 3);
       const t = await page.innerText('dialog');
-      assert.ok(t.includes('Dorsales') && t.includes('💡') && t.includes('🏆 50 kg') && t.includes('2\nsesiones'), t);
+      assert.ok(t.includes('Dorsales') && t.includes('50 kg') && t.includes('2\nsesiones'), t);
       if (CAPTURAS) { await page.waitForTimeout(2500); await page.screenshot({ path: path.join(CAPTURAS, 'ficha.png') }); }
       await page.click('dialog button:has-text("Ver historial")');
       await page.waitForSelector('dialog >> text=2 sesiones');
@@ -1145,7 +1150,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.waitForSelector('.ses-barra');
       assert.strictEqual(await page.locator('.ses-fichas [role=tab]').count(), 2);
       await page.click('.ses-fichas [role=tab]:has-text("Remo bajo")');
-      await page.click('button:has-text("✎ Cambiar o quitar este ejercicio")');
+      await page.click('button:has-text("Cambiar o quitar este ejercicio")');
       await page.click('dialog button:has-text("Cambiar por otro ejercicio")');
       await page.fill('#f-buscar-elegir', 'jalon al');
       await page.click('dialog .elegir-op[aria-label="Jalón al frente"]');
@@ -1156,7 +1161,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog .elegir-op[aria-label="Curl martillo"]');
       await page.waitForSelector('.ses-ej-cab h2:text-is("Curl martillo")');
       assert.strictEqual(await page.locator('.ses-fichas [role=tab]').count(), 3);
-      await page.click('button:has-text("✎ Cambiar o quitar este ejercicio")');
+      await page.click('button:has-text("Cambiar o quitar este ejercicio")');
       page.once('dialog', (d) => d.accept());
       await page.click('dialog button:has-text("Quitar del entreno")');
       await page.waitForFunction(() => document.querySelectorAll('.ses-fichas [role=tab]').length === 2);
@@ -1175,7 +1180,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('button:has-text("＋ Agregar serie")');
       let pregunta = '';
       page.once('dialog', (d) => { pregunta = d.message(); d.accept(); });
-      await page.click('button:has-text("💾 Guardar en la rutina")');
+      await page.click('button:has-text("Guardar en la rutina")');
       await page.waitForSelector('text=Rutina actualizada');
       assert.ok(pregunta.includes('3 × 12 · 55 kg') && pregunta.includes('Reemplaza'), pregunta);
       const fila = s.hojas.rutinas.filas.slice(1).find((f) => f[col('rutinas', 'ejercicio')] === 'Press banca plano');
@@ -1186,7 +1191,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog .elegir-op[aria-label="Curl martillo"]');
       await page.waitForSelector('.ses-ej-cab h2:text-is("Curl martillo")');
       page.once('dialog', (d) => { pregunta = d.message(); d.accept(); });
-      await page.click('button:has-text("💾 Guardar en la rutina")');
+      await page.click('button:has-text("Guardar en la rutina")');
       await page.waitForSelector('text=Agregado a la rutina');
       assert.ok(pregunta.includes('no está en la rutina'), pregunta);
       assert.ok(s.hojas.rutinas.filas.slice(1).some((f) => f[col('rutinas', 'ejercicio')] === 'Curl martillo' && f[col('rutinas', 'rutina')] === RUT));
@@ -1268,7 +1273,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       await page.click('dialog button:has-text("Editar ejercicio")');
       await page.fill('#f-ej-nombre', 'Prensa');
       await page.click('dialog button:has-text("Guardar ejercicio")');
-      await page.waitForSelector('text=Para juntarlos, usa «🔗 Unir con otro ejercicio»');
+      await page.waitForSelector('text=Para juntarlos, usa');
       await page.keyboard.press('Escape');
     });
     await prueba('ordenar las rutinas con ↑ ↓ y que el orden se mantenga', async () => {

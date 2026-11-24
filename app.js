@@ -56,8 +56,71 @@
     atras: '<path d="M15 5l-7 7 7 7"/>',
     sig: '<path d="M9 5l7 7-7 7"/>',
     cerrar: '<path d="M6 6l12 12M18 6L6 18"/>',
-    grafica: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'
+    grafica: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+    casa: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    mancuerna: '<rect x="4.5" y="6" width="3.5" height="12" rx="1.2"/><rect x="16" y="6" width="3.5" height="12" rx="1.2"/><path d="M2 9.5v5M22 9.5v5M8 12h8"/>',
+    persona: '<circle cx="12" cy="4.5" r="2"/><path d="m9 21 3-7 3 7"/><path d="m5 9 7 2 7-2"/><path d="M12 11v3"/>',
+    cubiertos: '<path d="M3 2v7a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V2M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3zm0 0v7"/>',
+    fuego: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+    trofeo: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0z"/>',
+    bici: '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>',
+    correr: '<circle cx="15" cy="4" r="2"/><path d="m5 21 4-5 3 1 1.5-5.5L9 10l-3 3"/><path d="m13.5 11.5 2.5 3h4"/>',
+    libro: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
+    lapiz: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
+    camara: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
+    amanecer: '<path d="M12 2v6M4.93 10.93l1.41 1.41M2 18h2M20 18h2M19.07 10.93l-1.41 1.41M22 22H2M8 6l4-4 4 4M16 18a4 4 0 0 0-8 0"/>',
+    sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    manzana: '<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 14 5 22 8 22c1.25 0 2.5-1.06 4-1.06z"/><path d="M10 2c1 .5 2 2 2 5"/>',
+    alerta: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+    calendario: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    lupa: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+    estrella: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+    libros: '<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
+    tendencia: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+    brote: '<path d="M7 20h10M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8zM14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>',
+    foco: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/>',
+    enlace: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    nota: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M10 9H8M16 13H8M16 17H8"/>',
+    rayo: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+    compartir: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/>',
+    reloj: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    guardar: '<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7"/>',
+    montana: '<path d="m8 3 4 8 5-5 5 15H2z"/>',
+    abajo: '<path d="m6 9 6 6 6-6"/>'
   };
+  // Los emojis de la interfaz se muestran como íconos de línea (mismo trazo y color en toda la app).
+  var EMOJI_ICONO = { "🏠": "casa", "🏋️": "mancuerna", "🏋": "mancuerna", "💪": "mancuerna", "📊": "grafica", "🧍": "persona", "🍽️": "cubiertos", "🍽": "cubiertos",
+    "🔥": "fuego", "🌙": "luna", "🍳": "amanecer", "🍛": "sol", "🍲": "luna", "🍌": "manzana", "🚴": "bici", "🚶": "camina", "🏃": "correr", "📅": "calendario",
+    "🔍": "lupa", "🏆": "trofeo", "📖": "libro", "✎": "lapiz", "⭐": "estrella", "📚": "libros", "📷": "camara", "⚠️": "alerta", "⚠": "alerta", "📈": "tendencia",
+    "🌱": "brote", "💡": "foco", "🔗": "enlace", "📝": "nota", "⚡": "rayo", "📤": "compartir", "🎯": "meta", "🕑": "reloj", "💾": "guardar", "⛰️": "montana", "⛰": "montana" };
+  var RE_EMOJI = new RegExp("(" + Object.keys(EMOJI_ICONO).sort(function (a, b) { return b.length - a.length; }).join("|") + ")\\s?", "g");
+  var NO_ICONOS = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, OPTION: 1, TITLE: 1, INPUT: 1 };
+  function iconizarTexto(nodo) {
+    var p = nodo.parentNode, txt = nodo.nodeValue;
+    if (!p || NO_ICONOS[p.nodeName] || p.closest && p.closest("svg") || !RE_EMOJI.test(txt)) return;
+    RE_EMOJI.lastIndex = 0;
+    var frag = document.createDocumentFragment(), ult = 0, m;
+    while ((m = RE_EMOJI.exec(txt))) {
+      if (m.index > ult) frag.appendChild(document.createTextNode(txt.slice(ult, m.index)));
+      var solo = txt.trim() === m[1];
+      var ic = h("span", { class: "ic" + (solo ? " solo" : ""), "aria-hidden": "true" }, svg(ICON[EMOJI_ICONO[m[1]]], 24));
+      frag.appendChild(ic);
+      ult = m.index + m[0].length;
+    }
+    if (ult < txt.length) frag.appendChild(document.createTextNode(txt.slice(ult)));
+    p.replaceChild(frag, nodo);
+  }
+  function iconizar(raizNodo) {
+    if (raizNodo.nodeType === 3) return iconizarTexto(raizNodo);
+    if (raizNodo.nodeType !== 1 || NO_ICONOS[raizNodo.nodeName]) return;
+    var w = document.createTreeWalker(raizNodo, NodeFilter.SHOW_TEXT), l = [], n;
+    while ((n = w.nextNode())) l.push(n);
+    l.forEach(iconizarTexto);
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(function (ms) { ms.forEach(function (m) { Array.prototype.forEach.call(m.addedNodes, iconizar); }); })
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
   function svg(inner, size, extra) {
     var t = document.createElement("template");
     t.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + (extra || 24) + " " + (extra || 24) +
@@ -295,7 +358,11 @@
 
   function pantallaCargando() {
     raiz.textContent = "";
-    raiz.appendChild(h("div", { class: "cargando-inicio", role: "status" }, h("div", { class: "girando" }), h("p", { text: "Cargando tus datos…" })));
+    // Esqueleto con la forma de la pantalla mientras llegan los datos
+    raiz.appendChild(h("div", { class: "esqueleto", role: "status", "aria-label": "Cargando tus datos…" },
+      h("div", { class: "sk sk-t" }), h("div", { class: "sk sk-dias" }), h("div", { class: "sk sk-hero" }),
+      h("div", { class: "sk-fila" }, h("div", { class: "sk sk-med" }), h("div", { class: "sk sk-med" }), h("div", { class: "sk sk-med" })),
+      h("div", { class: "sk sk-lista" }), h("p", { class: "sk-txt", text: "Cargando tus datos…" })));
   }
 
   /**
@@ -416,18 +483,52 @@
 
   function navegacion(activa) {
     var tab = function (clave, nombre, ico, accion) {
-      return h("button", { class: "tab" + (activa === clave ? " on" : ""), "aria-label": nombre, onclick: accion }, h("span", { class: "tab-ico", "aria-hidden": "true", text: ico }), nombre);
+      return h("button", { class: "tab" + (activa === clave ? " on" : ""), "aria-label": nombre, onclick: accion }, h("span", { class: "tab-ico", "aria-hidden": "true" }, icono(ico, 22)), h("span", { class: "tab-t", text: nombre }));
     };
     var ir = function (p) { return function () { estado.pantalla = p; if (p === "hoy") estado.fecha = estado.fecha > hoy ? hoy : estado.fecha; pintar(); window.scrollTo(0, 0); }; };
     return h("nav", { class: "nav nav5", "aria-label": "Principal" },
-      tab("hoy", "Hoy", "🏠", function () { estado.pantalla = "hoy"; irA(iso(new Date())); window.scrollTo(0, 0); }),
-      tab("entreno", "Entreno", "🏋️", ir("entreno")),
+      tab("hoy", "Hoy", "casa", function () { estado.pantalla = "hoy"; irA(iso(new Date())); window.scrollTo(0, 0); }),
+      tab("entreno", "Entreno", "mancuerna", ir("entreno")),
       h("button", { class: "fab", "aria-label": "Agregar registro", onclick: function () { abrirAgregar(estado.chat ? "chat" : "pegar"); } }, icono("plus", 28)),
-      tab("progreso", "Progreso", "📊", ir("progreso")),
-      tab("cuerpo", "Cuerpo", "🧍", ir("cuerpo")));
+      tab("progreso", "Progreso", "grafica", ir("progreso")),
+      tab("cuerpo", "Cuerpo", "persona", ir("cuerpo")));
   }
 
+  // Al cambiar de pantalla, las tarjetas entran en cascada y los números cuentan hasta su valor.
+  var pantallaPintada = null;
+  var REDUCIR = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   function pintar() {
+    var nueva = estado.pantalla !== pantallaPintada;
+    pantallaPintada = estado.pantalla;
+    pintarPantalla();
+    if (nueva && !REDUCIR && estado.pantalla !== "sesion") animarEntrada();
+  }
+  function animarEntrada() {
+    raiz.classList.remove("entrando");
+    Array.prototype.forEach.call(raiz.children, function (c, i) { c.style.setProperty("--i", Math.min(i, 9)); });
+    void raiz.offsetWidth;
+    raiz.classList.add("entrando");
+    clearTimeout(animarEntrada.t);
+    animarEntrada.t = setTimeout(function () { raiz.classList.remove("entrando"); }, 1100);
+    raiz.querySelectorAll(".duo b, .res b, .kpi .v, .card .valor, .racha b, .kp-ent b, .hero-bal .big, .hero-num").forEach(contarHasta);
+  }
+  function contarHasta(el) {
+    var t = el.firstChild;
+    if (!t || t.nodeType !== 3) { t = el.lastChild; if (!t || t.nodeType !== 3) return; }
+    var m = /^(\s*[−+-]?)(\d{1,3}(?:\.\d{3})*|\d+)(,\d+)?(.*)$/.exec(t.nodeValue);
+    if (!m) return;
+    var fin = Number(m[2].replace(/\./g, "") + (m[3] ? "." + m[3].slice(1) : "")), dec = m[3] ? m[3].length - 1 : 0, t0 = null;
+    if (!(fin > 0)) return;
+    requestAnimationFrame(function paso(ts) {
+      t0 = t0 || ts;
+      var p = Math.min(1, (ts - t0) / 900), e = 1 - Math.pow(1 - p, 4);
+      t.nodeValue = m[1] + (p < 1 ? fmt(fin * e, dec) : m[2] + (m[3] || "")) + m[4];
+      if (p < 1) requestAnimationFrame(paso);
+    });
+  }
+  window.addEventListener("scroll", function () { document.body.classList.toggle("desplazado", window.scrollY > 24); }, { passive: true });
+
+  function pintarPantalla() {
     if (estado.pantalla === "progreso") return pintarProgreso();
     if (estado.pantalla === "cuerpo") return pintarCuerpo();
     if (estado.pantalla === "entreno") return pintarEntreno();
@@ -528,20 +629,27 @@
     // Energía del día: lo que comiste contra lo que gastaste
     var maxE = Math.max(consumido, gastado, 1);
     var enMeta = -balance >= defMin && -balance <= defMax;
-    raiz.appendChild(h("div", { class: "hero" },
-      h("div", { class: "hero-t", text: esHoy ? "Energía de hoy" : "Energía del día" }),
+    var deficit = -balance, sinCom = !d.comidas.length;
+    var escMax = Math.max(defMax * 3, sinCom ? 0 : deficit + 150, 1000), escMin = -Math.max(500, escMax * .3);
+    var pos = function (v) { return (Math.max(escMin, Math.min(escMax, v)) - escMin) / (escMax - escMin) * 100; };
+    var estadoMeta = sinCom ? "Sin comidas aún" : enMeta ? "En tu meta" : deficit > defMax ? "Más déficit que la meta" : deficit > 0 ? "Menos déficit que la meta" : "En superávit";
+    raiz.appendChild(h("div", { class: "hero hero-hoy" },
+      h("div", { class: "hero-fila" }, h("div", { class: "hero-t", text: esHoy ? "Energía de hoy" : "Energía del día" }),
+        h("span", { class: "hero-estado" + (enMeta && !sinCom ? " ok" : ""), text: (enMeta && !sinCom ? "✓ " : "") + estadoMeta })),
+      h("div", { class: "hero-num" }, (balance < 0 ? "−" : balance > 0 ? "+" : "") + fmt(Math.abs(balance)), h("span", { text: " kcal" })),
+      h("div", { class: "hero-sub", text: (sinCom ? "Aún sin comidas" : balance <= 0 ? "Déficit " + (esHoy ? "de hoy" : "del día") : "Superávit " + (esHoy ? "de hoy" : "del día")) + " · meta −" + fmt(defMin) + " a −" + fmt(defMax) }),
+      h("div", { class: "meta-barra", role: "img", "aria-label": "Tu déficit contra la meta de " + fmt(defMin) + " a " + fmt(defMax) + " kcal" },
+        h("div", { class: "meta-cero", style: "left:" + pos(0).toFixed(1) + "%" }),
+        h("div", { class: "meta-banda", style: "left:" + pos(defMin).toFixed(1) + "%;width:" + (pos(defMax) - pos(defMin)).toFixed(1) + "%" }),
+        sinCom ? null : h("div", { class: "meta-punto", style: "left:" + pos(deficit).toFixed(1) + "%" })),
+      h("div", { class: "meta-ejes" }, h("span", { text: "Superávit" }), h("span", { text: "Meta" , style: "left:" + ((pos(defMin) + pos(defMax)) / 2).toFixed(1) + "%" }), h("span", { text: "Déficit" })),
       h("div", { class: "duo" },
         h("div", {}, h("small", { text: "🍽️ Consumido" }), h("b", {}, fmt(consumido), h("span", { text: " kcal" })),
+          h("div", { class: "pista" }, h("div", { style: "width:" + (consumido / maxE * 100).toFixed(1) + "%;background:#0F2A1D" })),
           h("em", { text: plural(d.comidas.length, "comida", "comidas") })),
         h("div", {}, h("small", { text: "🔥 Gastado" }), h("b", {}, fmt(gastado), h("span", { text: " kcal" })),
-          h("em", { text: fmt(base) + " base" + (ejercicio ? " + " + fmt(ejercicio) + " ejercicio" : "") }))),
-      h("div", { class: "barras-e" },
-        h("div", { class: "fila-e" }, h("span", { text: "Consumido" }), h("div", { class: "pista" }, h("div", { style: "width:" + (consumido / maxE * 100).toFixed(1) + "%;background:#0F2A1D" }))),
-        h("div", { class: "fila-e" }, h("span", { text: "Gastado" }), h("div", { class: "pista" }, h("div", { style: "width:" + (gastado / maxE * 100).toFixed(1) + "%;background:#2E7D32" })))),
-      h("div", { class: "res" },
-        h("div", {}, h("b", { text: (balance < 0 ? "−" : balance > 0 ? "+" : "") + fmt(Math.abs(balance)) + " kcal" }),
-          h("span", { class: "res-k", text: !d.comidas.length ? "Aún sin comidas" : balance <= 0 ? "Déficit " + (esHoy ? "de hoy" : "del día") : "Superávit " + (esHoy ? "de hoy" : "del día") })),
-        h("span", { class: "res-m", text: d.comidas.length && enMeta ? "✓ En tu meta" : "Meta −" + fmt(defMin) + " a −" + fmt(defMax) }))));
+          h("div", { class: "pista" }, h("div", { style: "width:" + (gastado / maxE * 100).toFixed(1) + "%;background:#2E7D32" })),
+          h("em", { text: fmt(base) + " base" + (ejercicio ? " + " + fmt(ejercicio) + " ejerc." : "") })))));
 
     // Macros
     var kT = prot * 4 + carb * 4 + gra * 9 || 1;
@@ -856,18 +964,37 @@
       var bueno = mejorSiSube ? dlt > 0 : dlt < 0;
       return h("span", { class: "delta " + (bueno ? "up" : "dn"), text: (dlt > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dlt), dec) + (unidad ? " " + unidad : "") });
     }
-    function kpi(k, d, valor, unidad, nota) {
-      return h("div", { class: "kpi" }, h("span", { class: "k" }, h("span", { text: k }), d),
-        h("span", { class: "v" }, valor, unidad ? h("small", { text: " " + unidad }) : null), h("span", { class: "n", text: nota }));
+    // Minigráfica de tendencia (día a día del periodo) para cada indicador
+    function tendencia(valorDe, color) {
+      var vals = diasF.map(function (f) { return valorDe(porDia[f] || VACIO_DIA); });
+      var con = vals.filter(function (v) { return v !== null; });
+      if (con.length < 2) return null;
+      var mx = Math.max.apply(null, con), mn = Math.min.apply(null, con), W = 120, H = 30, n = vals.length;
+      var pts = [];
+      vals.forEach(function (v, i) { if (v !== null) pts.push([(n < 2 ? 0 : i / (n - 1)) * W, H - 3 - (mx === mn ? .5 : (v - mn) / (mx - mn)) * (H - 6)]); });
+      var linea = pts.map(function (q, i) { return (i ? "L" : "M") + q[0].toFixed(1) + "," + q[1].toFixed(1); }).join("");
+      var area = linea + "L" + pts[pts.length - 1][0].toFixed(1) + "," + H + "L" + pts[0][0].toFixed(1) + "," + H + "Z";
+      var id = "sp" + Math.random().toString(36).slice(2, 8), u = pts[pts.length - 1];
+      var t = document.createElement("template");
+      t.innerHTML = '<svg class="spark" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + color + '" stop-opacity=".28"/><stop offset="1" stop-color="' + color + '" stop-opacity="0"/></linearGradient></defs>' +
+        '<path d="' + area + '" fill="url(#' + id + ')"/><path d="' + linea + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>' +
+        '<circle cx="' + u[0].toFixed(1) + '" cy="' + u[1].toFixed(1) + '" r="2.6" fill="' + color + '"/></svg>';
+      return t.content.firstChild;
+    }
+    function kpi(k, d, valor, unidad, nota, ico, color, spark) {
+      return h("div", { class: "kpi" }, h("span", { class: "k" }, h("span", { class: "kpi-ico", style: "color:" + color + ";background:" + color + "1F", "aria-hidden": "true" }, icono(ico, 16)), h("span", { class: "kpi-nom", text: k })),
+        h("span", { class: "kpi-fila" }, h("span", { class: "v" }, valor, unidad ? h("small", { text: " " + unidad }) : null), d), spark, h("span", { class: "n", text: nota }));
     }
     var tiposTxt = Object.keys(C.tipos).sort(function (x, y) { return C.tipos[y].n - C.tipos[x].n; }).map(function (t) { return C.tipos[t].n + " " + t; }).join(" · ");
     raiz.appendChild(h("div", { class: "kpis" },
       kpi("Proteína", delta(C.registrados ? C.protDia : null, P && P.registrados ? P.protDia : null, 0, "g", true),
-        C.registrados ? fmt(C.protDia) : "—", "g/día", C.registrados ? C.diasProt + " de " + C.registrados + " días en meta" : "Sin comidas"),
+        C.registrados ? fmt(C.protDia) : "—", "g/día", C.registrados ? C.diasProt + " de " + C.registrados + " días en meta" : "Sin comidas",
+        "cubiertos", "#2FA36B", tendencia(function (d) { return d.comidas ? d.prot : null; }, "#2FA36B")),
       kpi("Sueño", delta(C.suenoProm, P ? P.suenoProm : null, 1, "", true),
-        C.suenoProm === null ? "—" : fmt(C.suenoProm, 1), C.suenoProm === null ? "" : "h", C.noches ? plural(C.noches8, "noche", "noches") + " de 8 h" : "Sin registrar"),
-      kpi("Entrenos", delta(C.sesiones, P ? P.sesiones : null, 0, "", true), String(C.sesiones), "", tiposTxt || "Ninguno"),
-      kpi("Quemado", delta(C.quemado, P ? P.quemado : null, 0, "kcal", true), fmt(C.quemado), "kcal", "en ejercicio")));
+        C.suenoProm === null ? "—" : fmt(C.suenoProm, 1), C.suenoProm === null ? "" : "h", C.noches ? plural(C.noches8, "noche", "noches") + " de 8 h" : "Sin registrar",
+        "luna", "#4C8DF6", tendencia(function (d) { return d.sueno; }, "#4C8DF6")),
+      kpi("Entrenos", delta(C.sesiones, P ? P.sesiones : null, 0, "", true), String(C.sesiones), "", tiposTxt || "Ninguno", "mancuerna", "#0E6B47", null),
+      kpi("Quemado", delta(C.quemado, P ? P.quemado : null, 0, "kcal", true), fmt(C.quemado), "kcal", "en ejercicio", "fuego", "#E8890C", tendencia(function (d) { return d.ejercicio; }, "#E8890C"))));
     raiz.appendChild(h("div", { class: "nota-centro", text: P ? "▲▼ comparado con los " + prevDias.length + " días anteriores" : "La comparación con el periodo anterior aparece cuando hay datos de esas fechas." }));
 
     var ejeX = fechasEje(R.dias), N = R.dias.length;
@@ -949,7 +1076,10 @@
     bandas();
     encabezado("Medición trimestral", "Cuerpo");
     var med = medicion();
+    var frac = med.fecha ? Math.max(0, Math.min(1, 1 - med.faltan / DIAS_MEDICION)) : 1, Ca = 2 * Math.PI * 34;
+    var anillo = svg('<circle cx="40" cy="40" r="34" stroke="rgba(255,255,255,.55)" stroke-width="9"/><circle class="anillo-p" cx="40" cy="40" r="34" stroke="#0F2A1D" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (frac * Ca).toFixed(1) + " " + Ca.toFixed(1) + '" transform="rotate(-90 40 40)"/>', 80, 80);
     raiz.appendChild(h("div", { class: "hero-bal hero-cuerpo" },
+      h("div", { class: "ciclo", role: "img", "aria-label": "Ciclo de medición: " + Math.round(frac * 100) + " %" }, anillo, h("span", { text: Math.round(frac * 100) + "%" })),
       h("div", { class: "k", text: med.fecha ? "Última medición: " + corta(med.fecha) + " " + deISO(med.fecha).getFullYear() : "Aún no tienes mediciones" }),
       h("div", { class: "big" }, med.toca ? "Ya toca medir" : med.faltan + " ", med.toca ? null : h("small", { text: med.faltan === 1 ? "día para la próxima" : "días para la próxima" })),
       h("div", { class: "sub2", text: "Cada 3 meses: báscula de bioimpedancia y cinta métrica, el mismo día." }),
@@ -1121,16 +1251,23 @@
         h("td", { class: "v" + (dif > 0 ? " sube" : ""), text: !previa ? "nuevo" : dif === null ? "—" : dif === 0 ? "=" : (dif > 0 ? "▲ " : "▼ ") + fmt(Math.abs(dif), 1) + " kg" }));
     });
     var difVol = previa && previa.vol ? Math.round((vol - previa.vol) / previa.vol * 100) : null;
-    return h("div", { class: "ej" },
-      h("div", { class: "ej-cab" }, fotoEjercicio(info, g.ejercicio),
-        h("button", { type: "button", class: "ej-t", "aria-label": "Historial de " + g.ejercicio, onclick: function () { if (e) abrirHistorialEjercicio(e); } },
-          h("b", { text: g.ejercicio }), h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) }), badge,
-          h("span", { class: "ej-ver", text: "Ver historial ›" }))),
-      h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Serie" }), h("th", { text: "Peso" }), h("th", { text: "Reps" }), h("th", { class: "v", text: "vs anterior" }))), h("tbody", {}, filas)),
-      h("div", { class: "tot" }, h("span", { text: "Volumen " + fmt(vol) + " kg" }),
-        difVol === null ? null : h("span", { class: "badge " + (difVol >= 0 ? "up" : "dn"), text: (difVol >= 0 ? "▲ " : "▼ ") + Math.abs(difVol) + " % vs el " + corta(previa.fecha) }),
-        h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", "aria-label": "Cómo se hace " + g.ejercicio, onclick: function () { abrirEjercicio(g.ejercicio); } }),
-        h("button", { type: "button", class: "ej-editar", text: "Editar", onclick: function () { detalleGym(g); } })));
+    var maxKg = Math.max.apply(null, g.series.map(function (s) { return Number(s.peso_kg) || 0; }));
+    // Cerrada se ve el resumen (foto, nombre, series y peso máximo); al tocarla se abre el detalle.
+    var clave = fecha + "|" + g.ejercicio, abiertos = estado.ejAbiertos = estado.ejAbiertos || {};
+    return h("details", { class: "ej", open: !!abiertos[clave], ontoggle: function (ev) { abiertos[clave] = ev.target.open; } },
+      h("summary", { class: "ej-cab", "aria-label": g.ejercicio + ": ver series" }, fotoEjercicio(info, g.ejercicio),
+        h("div", { class: "ej-t" },
+          h("b", { text: g.ejercicio }), h("div", { class: "ej-m", text: nombresGrupos(info.principales.concat(info.secundarios)) }),
+          h("div", { class: "ej-res" }, h("span", { text: plural(g.series.length, "serie", "series") }), maxKg ? h("span", { text: "máx " + fmt(maxKg, 1) + " kg" }) : null), badge),
+        h("span", { class: "ej-flecha", "aria-hidden": "true" }, icono("abajo", 18))),
+      h("div", { class: "ej-cuerpo" },
+        h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: "Serie" }), h("th", { text: "Peso" }), h("th", { text: "Reps" }), h("th", { class: "v", text: "vs anterior" }))), h("tbody", {}, filas)),
+        h("div", { class: "tot" }, h("span", { text: "Volumen " + fmt(vol) + " kg" }),
+          difVol === null ? null : h("span", { class: "badge " + (difVol >= 0 ? "up" : "dn"), text: (difVol >= 0 ? "▲ " : "▼ ") + Math.abs(difVol) + " % vs el " + corta(previa.fecha) })),
+        h("div", { class: "ej-acc" },
+          e ? h("button", { type: "button", class: "ej-editar", text: "📈 Historial", "aria-label": "Historial de " + g.ejercicio, onclick: function () { abrirHistorialEjercicio(e); } }) : null,
+          h("button", { type: "button", class: "ej-editar ej-como", text: "📖 Cómo se hace", "aria-label": "Cómo se hace " + g.ejercicio, onclick: function () { abrirEjercicio(g.ejercicio); } }),
+          h("button", { type: "button", class: "ej-editar", text: "✎ Editar", onclick: function () { detalleGym(g); } }))));
   }
 
   /** Qué ejercicios trabajaron un músculo en el día o la semana elegidos. */
@@ -3331,9 +3468,10 @@
   function bandaRepetidos() {
     var r = buscarRepetidos();
     if (!r.sobran.length) return null;
-    return h("div", { class: "banda" },
-      h("b", { text: "Hay " + plural(r.sobran.length, "registro repetido", "registros repetidos") }),
-      h("span", { text: r.kcal ? "Suman " + fmt(r.kcal) + " kcal de más en tus totales." : "Hacen que tus totales salgan más altos." }),
+    return h("div", { class: "banda banda-rep" },
+      h("span", { class: "banda-ico", "aria-hidden": "true" }, icono("alerta", 18)),
+      h("div", { class: "banda-t" }, h("b", { text: "Hay " + plural(r.sobran.length, "registro repetido", "registros repetidos") }),
+        h("span", { text: r.kcal ? "Suman " + fmt(r.kcal) + " kcal de más en tus totales." : "Hacen que tus totales salgan más altos." })),
       h("button", { class: "btn lima", text: "Revisar", onclick: abrirRepetidos }));
   }
   function abrirRepetidos() {
