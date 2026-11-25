@@ -782,3 +782,11 @@ dialog.visor[open] .hoja, dialog.visor[open] > * { animation: none; }
 .kpi-fila { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .kpi-fila .v { margin-top: 0; }
 .kpi-fila .delta { white-space: nowrap; }
+
+/* Entreno: los ejercicios de cada fecha van replegados; un botón los despliega */
+.ses-musculos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ses-musculos span { font-size: 11.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: var(--lime-soft); color: var(--lime-ink); }
+.ses-desplegar { width: 100%; margin-top: 12px; min-height: 44px; border: 0; border-radius: 14px; background: #F1F4EE; color: var(--ink); font-weight: 800; font-size: 13.5px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.ses-desplegar svg { transition: transform .3s var(--curva); }
+.ses-desplegar.on svg { transform: rotate(180deg); }
+.ses-ejs:not([hidden]) { animation: abreEj .35s var(--curva); }

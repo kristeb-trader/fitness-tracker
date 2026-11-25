@@ -1235,6 +1235,27 @@
       }))));
   }
 
+  /** Ejercicios de una sesión: replegados bajo la fecha, con los músculos del día y un botón para desplegarlos. */
+  function listaSesion(f, grupos, hist) {
+    var cuenta = {};
+    grupos.forEach(function (g) { infoEjercicio(g.ejercicio).principales.forEach(function (m) { cuenta[m] = (cuenta[m] || 0) + g.series.length; }); });
+    var musculos = Object.keys(cuenta).sort(function (a, b) { return cuenta[b] - cuenta[a]; });
+    var abiertas = estado.sesAbiertas = estado.sesAbiertas || {};
+    var lista = h("div", { class: "ses-ejs", id: "ejs-" + f, hidden: !abiertas[f] }, grupos.map(function (g) { return tarjetaEjercicio(g, f, hist); }));
+    var txt = function (abierta) { return (abierta ? "Ocultar " : "Ver ") + (grupos.length === 1 ? "el ejercicio" : "los " + grupos.length + " ejercicios"); };
+    var boton = h("button", { type: "button", class: "ses-desplegar" + (abiertas[f] ? " on" : ""), "aria-expanded": abiertas[f] ? "true" : "false", "aria-controls": "ejs-" + f,
+      onclick: function () {
+        abiertas[f] = !abiertas[f];
+        lista.hidden = !abiertas[f];
+        boton.classList.toggle("on", abiertas[f]);
+        boton.setAttribute("aria-expanded", abiertas[f] ? "true" : "false");
+        boton.firstChild.textContent = txt(abiertas[f]);
+      } }, h("span", { text: txt(abiertas[f]) }), icono("abajo", 18));
+    return [
+      musculos.length ? h("div", { class: "ses-musculos", "aria-label": "Músculos trabajados ese día" }, musculos.map(function (m) { return h("span", { text: GRUPOS[m] + " · " + plural(cuenta[m], "serie", "series") }); })) : null,
+      boton, lista];
+  }
+
   function tarjetaEjercicio(g, fecha, hist) {
     var info = infoEjercicio(g.ejercicio);
     var e = hist[sinTildes(g.ejercicio)];
@@ -1413,7 +1434,7 @@
             h("div", {}, h("b", { text: fechaLarga(f) + " · " + rutina }), h("small", { text: sub.join(" · ") }))),
           gym && gym.notas && !grupos.length ? h("p", { class: "ses-notas", text: gym.notas }) : null,
           !grupos.length ? h("p", { class: "ayuda", text: "Para ver cada ejercicio con su foto, series y récords, registra las series (peso y repeticiones). Por ejemplo, dile a Claude: «jalón al frente 3 series: 40×12, 45×10, 50×8»." }) : null,
-          grupos.map(function (g) { return tarjetaEjercicio(g, f, hist); })));
+          grupos.length ? listaSesion(f, grupos, hist) : null));
       }
       ej.filter(function (x) { return x.tipo !== "gym"; }).forEach(function (x) {
         var km = datoNotas(x.notas, /([\d.,]+)\s*km/), desn = datoNotas(x.notas, /([\d.,]+)\s*m de desnivel/);

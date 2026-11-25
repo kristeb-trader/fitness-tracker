@@ -518,6 +518,17 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
       assert.ok(kp.includes('2.314') && kp.includes('kg levantados'), kp);
       assert.ok((await page.innerText('.racha')).includes('2 días'));
     });
+    await prueba('los ejercicios de cada fecha salen replegados, con sus músculos y un botón para desplegarlos', async () => {
+      const ses = page.locator('.sesion:has(.ses-desplegar)').first();
+      assert.ok(await ses.locator('.ses-ejs').isHidden(), 'replegados al entrar');
+      const m = await ses.locator('.ses-musculos').innerText();
+      assert.ok(m.includes('Espalda') && m.includes('series'), m);
+      assert.strictEqual(await ses.locator('.ses-desplegar').innerText(), 'Ver los 12 ejercicios');
+      await ses.locator('.ses-desplegar').click();
+      await ses.locator('.ses-ejs .ej').first().waitFor();
+      assert.strictEqual(await ses.locator('.ses-desplegar').getAttribute('aria-expanded'), 'true');
+      assert.strictEqual(await ses.locator('.ses-desplegar').innerText(), 'Ocultar los 12 ejercicios');
+    });
     await prueba('músculos trabajados: figura de frente y espalda, con espalda y bíceps', async () => {
       assert.strictEqual(await page.locator('.cuerpo-fig svg').count(), 2);
       const chips = await page.innerText('.chips-m');
@@ -573,6 +584,7 @@ const captura = async (page, nombre) => { if (CAPTURAS) await page.screenshot({ 
     await prueba('semana anterior y vuelta', async () => {
       await page.click('[aria-label="Semana anterior de entreno"]');
       await page.waitForFunction(() => !/Esta semana/.test(document.querySelector('.hero-ent .hero-t').textContent));
+      await page.locator('.ses-desplegar').first().click();
       assert.ok((await page.innerText('.app')).includes('Jalón al frente'), 'la sesión de hace 7 días');
       await page.click('[aria-label="Semana siguiente de entreno"]');
       await page.waitForSelector('.hero-ent .hero-t:has-text("Esta semana")');
